@@ -125,6 +125,8 @@ tbody tr:last-child td{border-bottom:none;}
 tbody tr:hover{background:var(--canvas);}
 .tag{font-family:var(--mono);font-size:12px;background:var(--accent-soft);color:var(--accent);padding:2px 7px;border-radius:6px;font-weight:700;}
 .tag.g{background:var(--canvas);color:var(--muted);}
+.seg{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:11px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;}
+.seg.on{background:var(--accent);color:#fff;border-color:var(--accent);}
 .empty{padding:48px 16px;text-align:center;color:var(--muted);font-size:13px;}
 .empty i{font-size:26px;display:block;margin-bottom:8px;opacity:.6;}
 .linkbtn{background:none;border:none;color:var(--accent);font-weight:600;font-size:12.5px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;}
@@ -321,12 +323,29 @@ tbody tr:hover{background:var(--canvas);}
 
       <!-- RIWAYAT -->
       <section class="panel" id="sec-riwayat">
-        <div class="card2">
-          <div class="card2-head"><span class="ct">50 perpindahan terbaru</span></div>
-          <div class="tbl-wrap"><table>
-            <thead><tr><th>Waktu</th><th>Nama</th><th>Dari</th><th>Ke</th><th>Tipe</th><th>Oleh</th></tr></thead>
-            <tbody id="hasilRiwayat"><tr><td colspan="5" class="empty"><span class="spin"></span></td></tr></tbody>
-          </table></div>
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <button class="seg on" id="segPindah" onclick="switchRiwayat('pindah')"><i class="bi bi-arrow-left-right"></i> Perpindahan</button>
+          <button class="seg adm" id="segHapus" onclick="switchRiwayat('hapus')"><i class="bi bi-trash"></i> Penghapusan</button>
+        </div>
+        <div id="riwPindah">
+          <div class="search-wrap"><i class="bi bi-search"></i><input id="cariPindah" class="inp" placeholder="Cari nama karyawan atau admin…"></div>
+          <div class="card2">
+            <div class="card2-head"><span class="ct" id="count-pindah">50 perpindahan terbaru</span></div>
+            <div class="tbl-wrap"><table>
+              <thead><tr><th>Waktu</th><th>Nama</th><th>Dari</th><th>Ke</th><th>Tipe</th><th>Oleh</th></tr></thead>
+              <tbody id="hasilRiwayat"><tr><td colspan="6" class="empty"><span class="spin"></span></td></tr></tbody>
+            </table></div>
+          </div>
+        </div>
+        <div id="riwHapus" style="display:none">
+          <div class="search-wrap"><i class="bi bi-search"></i><input id="cariHapus" class="inp" placeholder="Cari nama, NIK/kamar, atau admin…"></div>
+          <div class="card2">
+            <div class="card2-head"><span class="ct" id="count-hapus">Riwayat penghapusan</span></div>
+            <div class="tbl-wrap"><table>
+              <thead><tr><th>Waktu</th><th>Jenis</th><th>Data</th><th>Detail</th><th>Oleh</th></tr></thead>
+              <tbody id="hasilHapus"><tr><td colspan="5" class="empty"><span class="spin"></span></td></tr></tbody>
+            </table></div>
+          </div>
         </div>
       </section>
 
@@ -463,6 +482,7 @@ tbody tr:hover{background:var(--canvas);}
   </div>
   <div class="alert" id="eErr"></div>
   <div style="display:flex;gap:10px;margin-top:16px">
+    <button class="btn btn-ghost adm" title="Hapus karyawan" onclick="hapusKaryawan()" style="color:var(--full);border-color:var(--full)"><i class="bi bi-trash"></i></button>
     <button class="btn btn-ghost" style="flex:1" onclick="closeEdit()">Batal</button>
     <button class="btn btn-primary" style="flex:1" id="eSave" onclick="doEdit()">Simpan perubahan</button>
   </div>
@@ -540,6 +560,7 @@ tbody tr:hover{background:var(--canvas);}
   <div class="fld"><label>Catatan</label><input id="kmCatatan" class="inp" placeholder="mis. AC rusak, kamar mandi bocor"></div>
   <div class="alert" id="kmErr"></div>
   <div style="display:flex;gap:10px;margin-top:16px">
+    <button class="btn btn-ghost" title="Hapus kamar" onclick="hapusKamar()" style="color:var(--full);border-color:var(--full)"><i class="bi bi-trash"></i></button>
     <button class="btn btn-ghost" style="flex:1" onclick="closeKamar()">Batal</button>
     <button class="btn btn-primary" style="flex:1" id="kmSave" onclick="doSimpanKamar()">Simpan</button>
   </div>
@@ -615,7 +636,7 @@ function goto(sec){
   $("pageTitle").textContent=titles[sec];
   if(sec==="beranda")loadStats();
   if(sec==="kamar")initKamarTab();
-  if(sec==="riwayat")loadRiwayat();
+  if(sec==="riwayat")switchRiwayat("pindah");
   if(sec==="resign")loadResign($("cariResign").value.trim());
   if(sec==="profil")loadProfil();
   window.scrollTo(0,0);
@@ -809,17 +830,65 @@ async function doTambahKamar(){const b=$("nkSave"),er=$("nkErr");er.style.displa
   if($("kLokasi").value===lok)loadKamar();
   loadStats();}
 
+/* HAPUS */
+async function hapusKaryawan(){const nik=editOldNik;if(!nik||!isAdmin)return;
+  const nama=eNama.value||nik;
+  if(!confirm(`Hapus karyawan "${nama}" (NIK ${nik}) secara permanen?\nData & riwayat pindahnya ikut terhapus. Tidak bisa dibatalkan.`))return;
+  const{error}=await sb.rpc("hapus_karyawan",{p_nik:nik});
+  if(error){const e=$("eErr");e.textContent=error.message||"Gagal menghapus.";e.style.display="block";return;}
+  closeEdit();toast("Karyawan dihapus");refreshCari();loadStats();}
+async function hapusKamar(){const id=Number($("kmSave").dataset.id);if(!id||!isAdmin)return;
+  const k=kamarRows[id],label=k?`Blok ${k.block} Kamar ${k.no_kamar}`:`kamar #${id}`;
+  if(!confirm(`Hapus ${label} secara permanen?\nKamar yang masih berpenghuni tidak bisa dihapus. Tidak bisa dibatalkan.`))return;
+  const{error}=await sb.rpc("hapus_kamar",{p_id:id});
+  if(error){const e=$("kmErr");e.textContent=error.message||"Gagal menghapus.";e.style.display="block";return;}
+  closeKamar();toast("Kamar dihapus");loadKamar();loadStats();}
+function switchRiwayat(mode){
+  const p=mode==="pindah";
+  $("segPindah").classList.toggle("on",p);$("segHapus").classList.toggle("on",!p);
+  $("riwPindah").style.display=p?"":"none";$("riwHapus").style.display=p?"none":"";
+  if(p)loadRiwayat($("cariPindah").value.trim());else renderRiwayatHapus($("cariHapus").value.trim());
+}
+async function renderRiwayatHapus(term){
+  const tb=$("hasilHapus"),cnt=$("count-hapus");if(!tb)return;
+  tb.innerHTML=`<tr><td colspan="5" class="empty"><span class="spin"></span></td></tr>`;
+  let q=sb.from("riwayat_hapus").select("*");
+  if(term&&term.length>=2){const s=term.replace(/[,()%*]/g," ").trim();q=q.or(`nama.ilike.%${s}%,ref.ilike.%${s}%,detail.ilike.%${s}%,oleh_email.ilike.%${s}%`);}
+  const{data,error}=await q.order("waktu",{ascending:false}).limit(200);
+  if(error){tb.innerHTML=`<tr><td colspan="5" class="empty">Gagal memuat.</td></tr>`;return;}
+  if(!data||!data.length){tb.innerHTML=`<tr><td colspan="5" class="empty">${term?"Tidak ada yang cocok.":"Belum ada penghapusan."}</td></tr>`;if(cnt)cnt.textContent=term?"0 hasil":"Riwayat penghapusan";return;}
+  if(cnt)cnt.textContent=`${data.length} catatan`;
+  tb.innerHTML=data.map(r=>`<tr><td class="mono" style="font-size:12px;color:var(--muted)">${fmt(r.waktu)}</td>
+    <td><span class="tag g">${r.jenis||"-"}</span></td>
+    <td style="font-weight:600">${r.nama||"-"} <span class="mono" style="color:var(--muted);font-weight:400">${r.ref||""}</span></td>
+    <td style="color:var(--muted)">${r.detail||"-"}</td>
+    <td style="color:var(--muted);font-size:12px">${(r.oleh_email||"-").split("@")[0]}</td></tr>`).join("");
+}
+let hpTimer;
+$("cariHapus").addEventListener("input",e=>{clearTimeout(hpTimer);const v=e.target.value.trim();hpTimer=setTimeout(()=>renderRiwayatHapus(v),300);});
+
 /* RIWAYAT */
-async function loadRiwayat(){
-  const tb=$("hasilRiwayat");tb.innerHTML=`<tr><td colspan="6" class="empty"><span class="spin"></span></td></tr>`;
-  const{data,error}=await sb.from("riwayat_pindah").select("nik,waktu,tipe,dari_no_bed,ke_no_bed,oleh_email,karyawan:nik(nama),dari:dari_kamar_id(block,no_kamar),ke:ke_kamar_id(block,no_kamar)").order("waktu",{ascending:false}).limit(50);
+async function loadRiwayat(term){
+  const tb=$("hasilRiwayat"),cnt=$("count-pindah");tb.innerHTML=`<tr><td colspan="6" class="empty"><span class="spin"></span></td></tr>`;
+  let q=sb.from("riwayat_pindah").select("nik,waktu,tipe,dari_no_bed,ke_no_bed,oleh_email,karyawan:nik(nama),dari:dari_kamar_id(block,no_kamar),ke:ke_kamar_id(block,no_kamar)");
+  if(term&&term.length>=2){const s=term.replace(/[,()%*]/g," ").trim();
+    const{data:kx}=await sb.from("karyawan").select("nik").or(`nik.ilike.%${s}%,nama.ilike.%${s}%`).limit(300);
+    const niks=(kx||[]).map(k=>k.nik);
+    const parts=[`oleh_email.ilike.%${s}%`];
+    if(niks.length)parts.push(`nik.in.(${niks.map(n=>`"${n}"`).join(",")})`);
+    q=q.or(parts.join(","));
+  }
+  const{data,error}=await q.order("waktu",{ascending:false}).limit(term?300:50);
   if(error){tb.innerHTML=`<tr><td colspan="6" class="empty">Gagal memuat riwayat.</td></tr>`;return;}
-  if(!data.length){tb.innerHTML=`<tr><td colspan="6" class="empty">Belum ada perpindahan tercatat.</td></tr>`;return;}
+  if(!data.length){tb.innerHTML=`<tr><td colspan="6" class="empty">${term?"Tidak ada yang cocok.":"Belum ada perpindahan tercatat."}</td></tr>`;if(cnt)cnt.textContent=term?"0 hasil":"50 perpindahan terbaru";return;}
+  if(cnt)cnt.textContent=term?`${data.length} hasil`:"50 perpindahan terbaru";
   tb.innerHTML=data.map(r=>`<tr><td class="mono" style="font-size:12px;color:var(--muted)">${fmt(r.waktu)}</td><td ${r.nik?`style="font-weight:600;cursor:pointer" onclick="openDetail('${r.nik}')"`:`style="font-weight:600"`}>${r.karyawan?.nama??"-"}</td>
   <td class="mono" style="color:var(--muted)">${r.dari?`${r.dari.block}-${r.dari.no_kamar}/${r.dari_no_bed??"-"}`:"-"}</td>
   <td class="mono">${r.ke?`${r.ke.block}-${r.ke.no_kamar}/${r.ke_no_bed??"-"}`:"-"}</td><td><span class="tag g">${r.tipe??"-"}</span></td>
   <td style="color:var(--muted);font-size:12px">${(r.oleh_email||"-").split("@")[0]}</td></tr>`).join("");
 }
+let rwTimer;
+$("cariPindah").addEventListener("input",e=>{clearTimeout(rwTimer);const v=e.target.value.trim();rwTimer=setTimeout(()=>loadRiwayat(v),300);});
 
 /* PROFIL */
 async function loadProfil(){
