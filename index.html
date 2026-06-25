@@ -324,7 +324,7 @@ tbody tr:hover{background:var(--canvas);}
         <div class="card2">
           <div class="card2-head"><span class="ct">50 perpindahan terbaru</span></div>
           <div class="tbl-wrap"><table>
-            <thead><tr><th>Waktu</th><th>Nama</th><th>Dari</th><th>Ke</th><th>Tipe</th></tr></thead>
+            <thead><tr><th>Waktu</th><th>Nama</th><th>Dari</th><th>Ke</th><th>Tipe</th><th>Oleh</th></tr></thead>
             <tbody id="hasilRiwayat"><tr><td colspan="5" class="empty"><span class="spin"></span></td></tr></tbody>
           </table></div>
         </div>
@@ -728,13 +728,14 @@ async function loadKamar(){
 
 /* RIWAYAT */
 async function loadRiwayat(){
-  const tb=$("hasilRiwayat");tb.innerHTML=`<tr><td colspan="5" class="empty"><span class="spin"></span></td></tr>`;
-  const{data,error}=await sb.from("riwayat_pindah").select("nik,waktu,tipe,dari_no_bed,ke_no_bed,karyawan:nik(nama),dari:dari_kamar_id(block,no_kamar),ke:ke_kamar_id(block,no_kamar)").order("waktu",{ascending:false}).limit(50);
-  if(error){tb.innerHTML=`<tr><td colspan="5" class="empty">Gagal memuat riwayat.</td></tr>`;return;}
-  if(!data.length){tb.innerHTML=`<tr><td colspan="5" class="empty">Belum ada perpindahan tercatat.</td></tr>`;return;}
+  const tb=$("hasilRiwayat");tb.innerHTML=`<tr><td colspan="6" class="empty"><span class="spin"></span></td></tr>`;
+  const{data,error}=await sb.from("riwayat_pindah").select("nik,waktu,tipe,dari_no_bed,ke_no_bed,oleh_email,karyawan:nik(nama),dari:dari_kamar_id(block,no_kamar),ke:ke_kamar_id(block,no_kamar)").order("waktu",{ascending:false}).limit(50);
+  if(error){tb.innerHTML=`<tr><td colspan="6" class="empty">Gagal memuat riwayat.</td></tr>`;return;}
+  if(!data.length){tb.innerHTML=`<tr><td colspan="6" class="empty">Belum ada perpindahan tercatat.</td></tr>`;return;}
   tb.innerHTML=data.map(r=>`<tr><td class="mono" style="font-size:12px;color:var(--muted)">${fmt(r.waktu)}</td><td ${r.nik?`style="font-weight:600;cursor:pointer" onclick="openDetail('${r.nik}')"`:`style="font-weight:600"`}>${r.karyawan?.nama??"-"}</td>
   <td class="mono" style="color:var(--muted)">${r.dari?`${r.dari.block}-${r.dari.no_kamar}/${r.dari_no_bed??"-"}`:"-"}</td>
-  <td class="mono">${r.ke?`${r.ke.block}-${r.ke.no_kamar}/${r.ke_no_bed??"-"}`:"-"}</td><td><span class="tag g">${r.tipe??"-"}</span></td></tr>`).join("");
+  <td class="mono">${r.ke?`${r.ke.block}-${r.ke.no_kamar}/${r.ke_no_bed??"-"}`:"-"}</td><td><span class="tag g">${r.tipe??"-"}</span></td>
+  <td style="color:var(--muted);font-size:12px">${(r.oleh_email||"-").split("@")[0]}</td></tr>`).join("");
 }
 
 /* PROFIL */
@@ -845,7 +846,7 @@ async function doEdit(){const nik=eNik.value.trim();if(!nik){const e=$("eErr");e
   if(resign){const boxes=[...document.querySelectorAll("#asetReturn input[type=checkbox]")];
     aset_kembali=boxes.filter(b=>b.checked).map(b=>Number(b.dataset.id));
     potongan=boxes.filter(b=>!b.checked).reduce((s,b)=>s+Number(b.dataset.harga||0),0);}
-  const p={nik,nama:eNama.value.trim(),gender:eGender.value||null,gol:eGol.value.trim()||null,fasilitas:eFasilitas.value||null,department:eDept.value.trim()||null,jabatan:eJab.value.trim()||null,perusahaan:ePerusahaan.value.trim()||null,point_of_hire:ePoh.value.trim()||null,tgl_masuk_kerja:eTmk.value||null,tgl_masuk_mess:eTmm.value||null,status:eStatus.value,tgl_resign:resign?($("eTglResign").value||null):null,alasan_resign:resign?($("eAlasan").value.trim()||null):null,aset_kembali:aset_kembali,potongan:potongan};
+  const p={nik,nama:eNama.value.trim(),gender:eGender.value||null,gol:eGol.value.trim()||null,fasilitas:eFasilitas.value||null,department:eDept.value.trim()||null,jabatan:eJab.value.trim()||null,perusahaan:ePerusahaan.value.trim()||null,point_of_hire:ePoh.value.trim()||null,tgl_masuk_kerja:eTmk.value||null,tgl_masuk_mess:eTmm.value||null,status:eStatus.value,tgl_resign:resign?($("eTglResign").value||null):null,alasan_resign:resign?($("eAlasan").value.trim()||null):null,resign_oleh:resign?(curUser?.email||null):null,aset_kembali:aset_kembali,potongan:potongan};
   const{error}=await sb.from("karyawan").update(p).eq("nik",editOldNik);
   b.disabled=false;b.textContent="Simpan perubahan";
   if(error){const e=$("eErr");e.textContent=error.message||"Gagal menyimpan.";e.style.display="block";return;}
@@ -891,7 +892,7 @@ async function openDetail(nik){
     row("Perusahaan", r.perusahaan)+row("Point of Hire", r.point_of_hire)+
     row("Masuk kerja", r.tgl_masuk_kerja)+row("Masuk mess", r.tgl_masuk_mess)+
     row("Hunian", loc)+
-    (isR?row("Tanggal resign", r.tgl_resign)+row("Alasan resign", r.alasan_resign)
+    (isR?row("Tanggal resign", r.tgl_resign)+row("Alasan resign", r.alasan_resign)+row("Di-resign oleh", r.resign_oleh)
         +row("Aset dikembalikan", namaKembali)+row("Aset tidak kembali", tdkKembali)
         +row("Potongan", `<b style="color:var(--full)">${rp(r.potongan)}</b>`):"");
   $("dEditBtn").onclick=()=>{closeDetail();openEdit(r.nik);};
