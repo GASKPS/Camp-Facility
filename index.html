@@ -315,7 +315,7 @@ tbody tr:hover{background:var(--canvas);}
           <select id="kStatus" class="sel" style="flex:1;min-width:140px"><option value="">Semua kamar</option><option value="slot">Ada bed kosong</option><option value="penuh">Penuh</option><option value="kosong">Kosong total</option></select>
           <button class="btn btn-primary" onclick="loadKamar()"><i class="bi bi-search"></i> Tampilkan</button>
         </div>
-        <div class="card2-head" style="border:none;padding:0 2px 12px"><span class="ct" id="count-kamar">Pilih lokasi lalu tampilkan</span></div>
+        <div class="card2-head" style="border:none;padding:0 2px 12px"><span class="ct" id="count-kamar">Pilih lokasi lalu tampilkan</span><button class="linkbtn adm" onclick="openTambahKamar()"><i class="bi bi-plus-square"></i> Tambah kamar</button></div>
         <div id="kamarArea" class="rooms"></div>
       </section>
 
@@ -524,6 +524,52 @@ tbody tr:hover{background:var(--canvas);}
   </div>
 </div></div>
 
+<!-- MODAL EDIT KAMAR -->
+<div class="mback" id="kamarModal"><div class="mbox">
+  <h4><i class="bi bi-pencil-square"></i> Edit kamar</h4>
+  <div class="sub" id="kmInfo"></div>
+  <div class="grid3">
+    <div class="fld"><label>Gender</label><select id="kmGender" class="sel"><option value="">-</option><option value="L">L</option><option value="P">P</option></select></div>
+    <div class="fld"><label>Golongan</label><input id="kmGol" type="number" class="inp"></div>
+    <div class="fld"><label>Fasilitas</label><select id="kmFas" class="sel"><option value="">-</option><option value="CR">CR</option><option value="NR">NR</option></select></div>
+  </div>
+  <div class="grid2">
+    <div class="fld"><label>Jumlah bed</label><input id="kmBed" type="number" min="1" class="inp"></div>
+    <div class="fld"><label>Kondisi</label><label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:11px 0"><input type="checkbox" id="kmRusak"> Ada kerusakan</label></div>
+  </div>
+  <div class="fld"><label>Catatan</label><input id="kmCatatan" class="inp" placeholder="mis. AC rusak, kamar mandi bocor"></div>
+  <div class="alert" id="kmErr"></div>
+  <div style="display:flex;gap:10px;margin-top:16px">
+    <button class="btn btn-ghost" style="flex:1" onclick="closeKamar()">Batal</button>
+    <button class="btn btn-primary" style="flex:1" id="kmSave" onclick="doSimpanKamar()">Simpan</button>
+  </div>
+</div></div>
+
+<!-- MODAL TAMBAH KAMAR -->
+<div class="mback" id="addKamarModal"><div class="mbox">
+  <h4><i class="bi bi-plus-square"></i> Tambah kamar</h4>
+  <div class="grid2">
+    <div class="fld"><label>Lokasi hunian</label><input id="nkLokasi" class="inp" list="lokasiList" placeholder="mis. SURYA RESIDENCE (P2)"></div>
+    <div class="fld"><label>Lantai (floor)</label><input id="nkFloor" class="inp"></div>
+  </div>
+  <div class="grid3">
+    <div class="fld"><label>Blok</label><input id="nkBlock" class="inp"></div>
+    <div class="fld"><label>No kamar</label><input id="nkNo" class="inp"></div>
+    <div class="fld"><label>Jumlah bed</label><input id="nkBed" type="number" min="1" class="inp" value="4"></div>
+  </div>
+  <div class="grid3">
+    <div class="fld"><label>Gender</label><select id="nkGender" class="sel"><option value="">-</option><option value="L">L</option><option value="P">P</option></select></div>
+    <div class="fld"><label>Golongan</label><input id="nkGol" type="number" class="inp"></div>
+    <div class="fld"><label>Fasilitas</label><select id="nkFas" class="sel"><option value="">-</option><option value="CR">CR</option><option value="NR">NR</option></select></div>
+  </div>
+  <datalist id="lokasiList"></datalist>
+  <div class="alert" id="nkErr"></div>
+  <div style="display:flex;gap:10px;margin-top:16px">
+    <button class="btn btn-ghost" style="flex:1" onclick="closeTambahKamar()">Batal</button>
+    <button class="btn btn-primary" style="flex:1" id="nkSave" onclick="doTambahKamar()">Tambah kamar</button>
+  </div>
+</div></div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -532,7 +578,7 @@ const sb=supabase.createClient(
  "https://nzbwjqlahbqqasnzkaym.supabase.co",
  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56YndqcWxhaGJxcWFzbnprYXltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyOTkyNTEsImV4cCI6MjA5Nzg3NTI1MX0.KX2utEHMvmOS8XuMNc1JtfFR0q1rbOwLOFjeUTur_9U"
 );
-let isAdmin=false,lastResults={},moveCtx=null,mvBed=null,editOldNik=null,curUser=null;
+let isAdmin=false,lastResults={},moveCtx=null,mvBed=null,editOldNik=null,curUser=null,kamarRows={};
 let asetList=[],asetMap={};
 function rp(n){return "Rp "+(Number(n)||0).toLocaleString("id-ID");}
 async function loadAset(){
@@ -715,16 +761,53 @@ async function loadKamar(){
   rooms.sort((a,b)=>(parseInt(a.block)-parseInt(b.block))||(parseInt(a.no_kamar)-parseInt(b.no_kamar)));cnt.textContent=`${rooms.length} kamar`;
   const{data:occ}=await sb.from("karyawan").select("nik,nama,no_bed,kamar_id").eq("status","aktif").in("kamar_id",rooms.map(d=>d.id));
   const byRoom={};(occ||[]).forEach(o=>{(byRoom[o.kamar_id]=byRoom[o.kamar_id]||[]).push(o);});
+  kamarRows={};rooms.forEach(k=>kamarRows[k.id]=k);
   area.innerHTML=rooms.map(k=>{const ppl=(byRoom[k.id]||[]).reduce((m,p)=>{m[p.no_bed]=p;return m;},{});let beds="";
     for(let i=1;i<=k.jumlah_bed;i++){
       if(ppl[i]){beds+=`<div class="bedc occ" style="cursor:pointer" onclick="openDetail('${ppl[i].nik}')"><span class="bn">${i}</span><span class="nm">${ppl[i].nama}</span></div>`;}
       else{const clk=isAdmin?`onclick="openAssign(${k.id},'${k.gender}',${i},'Blok ${k.block} Kamar ${k.no_kamar}')" style="cursor:pointer"`:"";
            beds+=`<div class="bedc free" ${clk}><span class="bn">${i}</span><span class="nm">${isAdmin?"+ isi":"kosong"}</span></div>`;}
     }
-    return `<div class="room"><div class="rh"><span class="rt">Blok <span class="mono">${k.block}</span> · Kamar <span class="mono">${k.no_kamar}</span></span><span class="pill p-${k.status_kamar}">${k.status_kamar}</span></div>
-    <div class="rm">${k.gender==="L"?"Laki-laki":"Perempuan"} · ${k.fasilitas||"-"} · <span class="mono">${k.terisi}/${k.jumlah_bed}</span> terisi</div><div class="beds">${beds}</div></div>`;}).join("");
+    const rusakBadge=k.rusak?`<span class="pill" style="background:var(--full-bg);color:var(--full)">⚠ RUSAK</span>`:"";
+    const editBtn=isAdmin?`<button class="actbtn" title="Edit kamar" onclick="openEditKamar(${k.id})"><i class="bi bi-pencil"></i></button>`:"";
+    const catatan=k.catatan?`<div class="rm" style="color:var(--full)"><i class="bi bi-exclamation-triangle"></i> ${k.catatan}</div>`:"";
+    return `<div class="room"><div class="rh"><span class="rt">Blok <span class="mono">${k.block}</span> · Kamar <span class="mono">${k.no_kamar}</span></span><span style="display:flex;align-items:center;gap:6px">${rusakBadge}<span class="pill p-${k.status_kamar}">${k.status_kamar}</span>${editBtn}</span></div>
+    <div class="rm">${k.gender==="L"?"Laki-laki":k.gender==="P"?"Perempuan":"-"} · ${k.fasilitas||"-"}${k.golongan?` · Gol ${k.golongan}`:""} · <span class="mono">${k.terisi}/${k.jumlah_bed}</span> terisi</div>${catatan}<div class="beds">${beds}</div></div>`;}).join("");
   if(!rooms.length)area.innerHTML=`<div class="empty">Tidak ada kamar untuk pilihan ini.</div>`;
 }
+
+/* KELOLA KAMAR */
+function openEditKamar(id){if(!isAdmin)return;const k=kamarRows[id];if(!k)return;
+  $("kmSave").dataset.id=id;
+  $("kmInfo").innerHTML=`Blok <b>${k.block}</b> · Kamar <b>${k.no_kamar}</b>${k.lokasi_hunian?` · ${k.lokasi_hunian}`:""}`;
+  $("kmGender").value=k.gender||"";$("kmGol").value=k.golongan??"";$("kmFas").value=k.fasilitas||"";
+  $("kmBed").value=k.jumlah_bed??"";$("kmRusak").checked=!!k.rusak;$("kmCatatan").value=k.catatan||"";
+  $("kmErr").style.display="none";$("kamarModal").classList.add("show");}
+function closeKamar(){$("kamarModal").classList.remove("show");}
+async function doSimpanKamar(){const id=Number($("kmSave").dataset.id),b=$("kmSave"),er=$("kmErr");er.style.display="none";
+  b.disabled=true;b.innerHTML='<span class="spin"></span>';
+  const{error}=await sb.rpc("simpan_kamar",{p_id:id,p_gender:$("kmGender").value,p_golongan:$("kmGol").value?Number($("kmGol").value):null,p_fasilitas:$("kmFas").value,p_jumlah_bed:Number($("kmBed").value||0),p_rusak:$("kmRusak").checked,p_catatan:$("kmCatatan").value.trim()});
+  b.disabled=false;b.textContent="Simpan";
+  if(error){er.textContent=error.message||"Gagal menyimpan.";er.style.display="block";return;}
+  closeKamar();toast("Kamar tersimpan ✓");loadKamar();loadStats();}
+function openTambahKamar(){if(!isAdmin)return;
+  ["nkLokasi","nkFloor","nkBlock","nkNo","nkGol"].forEach(id=>$(id).value="");
+  $("nkBed").value="4";$("nkGender").value="";$("nkFas").value="";$("nkErr").style.display="none";
+  $("lokasiList").innerHTML=[...$("kLokasi").options].filter(o=>o.value).map(o=>`<option value="${o.value}">`).join("");
+  if($("kLokasi").value)$("nkLokasi").value=$("kLokasi").value;
+  $("addKamarModal").classList.add("show");}
+function closeTambahKamar(){$("addKamarModal").classList.remove("show");}
+async function doTambahKamar(){const b=$("nkSave"),er=$("nkErr");er.style.display="none";
+  const lok=$("nkLokasi").value.trim(),blk=$("nkBlock").value.trim(),no=$("nkNo").value.trim();
+  if(!lok||!blk||!no){er.textContent="Lokasi, blok, dan nomor kamar wajib diisi.";er.style.display="block";return;}
+  b.disabled=true;b.innerHTML='<span class="spin"></span>';
+  const{error}=await sb.rpc("tambah_kamar",{p_lokasi:lok,p_block:blk,p_no_kamar:no,p_floor:$("nkFloor").value.trim(),p_gender:$("nkGender").value,p_golongan:$("nkGol").value?Number($("nkGol").value):null,p_fasilitas:$("nkFas").value,p_jumlah_bed:Number($("nkBed").value||0)});
+  b.disabled=false;b.textContent="Tambah kamar";
+  if(error){er.textContent=error.message||"Gagal menambah kamar.";er.style.display="block";return;}
+  closeTambahKamar();toast("Kamar ditambahkan ✓");
+  if(![...$("kLokasi").options].some(o=>o.value===lok)){const o=document.createElement("option");o.value=lok;o.textContent=lok;$("kLokasi").appendChild(o);}
+  if($("kLokasi").value===lok)loadKamar();
+  loadStats();}
 
 /* RIWAYAT */
 async function loadRiwayat(){
