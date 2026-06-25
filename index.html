@@ -10,6 +10,7 @@
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{
   --ink:#0e1b33; --ink2:#16264a; --canvas:#eef1f6; --surface:#ffffff; --line:#e3e8f0;
@@ -406,6 +407,11 @@ tbody tr:hover{background:var(--canvas);}
             <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px">Cek kamar melebihi kapasitas, gender tak cocok, fasilitas janggal, atau karyawan tanpa kamar.</p>
             <button class="btn btn-ghost" id="cekBtn" onclick="cekData()"><i class="bi bi-clipboard-check"></i> Periksa sekarang</button>
             <div id="cekResult" style="margin-top:14px"></div>
+          </div>
+          <div class="pcard adm">
+            <h3>Cadangan data (backup)</h3>
+            <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px">Unduh seluruh data (karyawan, kamar, riwayat, aset) sebagai Excel + file backup. Simpan rutin untuk jaga-jaga.</p>
+            <button class="btn btn-primary" id="backupBtn" onclick="downloadBackup()"><i class="bi bi-download"></i> Download backup</button>
           </div>
           <button class="btn btn-ghost" onclick="doLogout()" style="width:100%"><i class="bi bi-box-arrow-right"></i> Keluar dari akun</button>
         </div>
@@ -1112,6 +1118,59 @@ async function cabutAdmin(email){if(!confirm(`Cabut hak admin untuk ${email}?`))
   const{error}=await sb.rpc("cabut_admin",{p_email:email});
   if(error){const er=$("admErr");er.textContent=error.message||"Gagal mencabut admin.";er.style.display="block";return;}
   toast("Hak admin dicabut");loadProfil();}
+
+/* SCREENSHOT */
+/* BACKUP */
+async function fetchAll(table,orderCol){
+  const out=[];let from=0;const step=1000;
+  while(true){
+    let q=sb.from(table).select("*");if(orderCol)q=q.order(orderCol,{ascending:true});
+    const{data,error}=await q.range(from,from+step-1);
+    if(error)throw error;
+    out.push(...(data||[]));
+    if(!data||data.length<step)break;
+    from+=step;
+  }
+  return out;
+}
+function flattenRow(r){const o={};for(const k in r){const v=r[k];o[k]=(v&&typeof v==="object")?JSON.stringify(v):v;}return o;}
+function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement("script");s.src=src;s.onload=()=>res(true);s.onerror=()=>rej(new Error("gagal"));document.head.appendChild(s);});}
+async function ensureXLSX(){
+  if(window.XLSX)return true;
+  const cdns=["https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js","https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js","https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"];
+  for(const u of cdns){try{await loadScript(u);if(window.XLSX)return true;}catch(e){}}
+  return !!window.XLSX;
+}
+function unduh(blob,nama){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=nama;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);}
+async function downloadBackup(){
+  const b=$("backupBtn");b.disabled=true;b.innerHTML='<span class="spin"></span> Menyiapkan…';
+  try{
+    const tables={
+      karyawan:      await fetchAll("karyawan","nik"),
+      kamar:         await fetchAll("kamar","id"),
+      riwayat_pindah:await fetchAll("riwayat_pindah","waktu"),
+      riwayat_hapus: await fetchAll("riwayat_hapus","id"),
+      aset:          await fetchAll("aset","id")
+    };
+    const today=new Date().toISOString().slice(0,10);
+    const tot=Object.values(tables).reduce((s,a)=>s+a.length,0);
+    // 1) file backup .json (selalu jalan)
+    unduh(new Blob([JSON.stringify({app:"mess-karyawan",exported_at:new Date().toISOString(),tables},null,2)],{type:"application/json"}),`mess-backup-${today}.json`);
+    // 2) file Excel .xlsx (muat pustaka dulu, dengan cadangan CDN)
+    b.innerHTML='<span class="spin"></span> Membuat Excel…';
+    const ok=await ensureXLSX();
+    if(!ok){toast("File JSON tersimpan. Excel gagal (koneksi/CDN diblokir).");return;}
+    await new Promise(r=>setTimeout(r,600)); // jeda agar unduhan kedua tak diblok browser
+    const wb=XLSX.utils.book_new();
+    Object.entries(tables).forEach(([name,rows])=>{
+      const data=rows.length?rows.map(flattenRow):[{info:"(kosong)"}];
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data),name.slice(0,31));
+    });
+    XLSX.writeFile(wb,`mess-backup-${today}.xlsx`);
+    toast(`Backup terunduh ✓ (${tot} baris)`);
+  }catch(e){toast("Gagal membuat backup");}
+  b.disabled=false;b.innerHTML='<i class="bi bi-download"></i> Download backup';
+}
 
 /* SCREENSHOT */
 function screenshotTabel(){const c=document.querySelector("#shot .tbl-wrap"),t=$("table-cari");
