@@ -276,6 +276,14 @@ tbody tr:hover{background:var(--canvas);}
           <div class="mt"><b>Tingkat hunian</b><span id="occText">–</span></div>
           <div class="bar"><i id="occBar" style="width:0%"></i></div>
         </div>
+        <div class="card2" style="margin-bottom:22px">
+          <div class="card2-head"><span class="ct">Rincian</span></div>
+          <div style="padding:16px;display:grid;grid-template-columns:1fr;gap:22px" id="rincian">
+            <div><div class="sl" style="margin-bottom:10px">Hunian per lokasi</div><div id="rinLokasi"></div></div>
+            <div><div class="sl" style="margin-bottom:10px">Karyawan per perusahaan</div><div id="rinPerusahaan"></div></div>
+            <div><div class="sl" style="margin-bottom:10px">Per gender</div><div id="rinGender" style="display:flex;gap:14px"></div></div>
+          </div>
+        </div>
         <div class="card2">
           <div class="card2-head"><span class="ct">Perpindahan terbaru</span><button class="linkbtn" onclick="goto('riwayat')">Lihat semua <i class="bi bi-arrow-right"></i></button></div>
           <div class="tbl-wrap"><table><thead><tr><th>Waktu</th><th>Nama</th><th>Ke</th></tr></thead><tbody id="berandaRiwayat"><tr><td colspan="3" class="empty"><span class="spin"></span></td></tr></tbody></table></div>
@@ -285,6 +293,11 @@ tbody tr:hover{background:var(--canvas);}
       <!-- KARYAWAN -->
       <section class="panel" id="sec-karyawan">
         <div class="search-wrap"><i class="bi bi-search"></i><input id="cariNik" class="inp" placeholder="Cari nama atau NIK karyawan…"></div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+          <select id="fPerusahaan" class="sel" style="flex:1;min-width:150px" onchange="runSearch()"><option value="">Semua perusahaan</option></select>
+          <select id="fGender" class="sel" style="flex:1;min-width:130px" onchange="runSearch()"><option value="">Semua gender</option><option value="L">Laki-laki</option><option value="P">Perempuan</option></select>
+          <select id="fSort" class="sel" style="flex:1;min-width:130px" onchange="runSearch()"><option value="nama">Urut: Nama</option><option value="nik">Urut: NIK</option></select>
+        </div>
         <div class="card2">
           <div class="card2-head"><span class="ct" id="count-cari">Hasil pencarian</span><div style="display:flex;gap:16px"><button class="linkbtn adm" onclick="openAdd()"><i class="bi bi-person-plus"></i> Tambah karyawan</button><button class="linkbtn" onclick="screenshotTabel()"><i class="bi bi-camera"></i> Screenshot</button></div></div>
           <div id="shot"><div class="tbl-wrap"><table id="table-cari">
@@ -296,9 +309,10 @@ tbody tr:hover{background:var(--canvas);}
 
       <!-- KAMAR -->
       <section class="panel" id="sec-kamar">
-        <div class="filters">
-          <select id="kLokasi" class="sel" onchange="loadBlocks()"><option value="">Pilih lokasi</option></select>
-          <select id="kBlock" class="sel"><option value="">Semua blok</option></select>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px">
+          <select id="kLokasi" class="sel" style="flex:1;min-width:150px" onchange="loadBlocks()"><option value="">Pilih lokasi</option></select>
+          <select id="kBlock" class="sel" style="flex:1;min-width:120px"><option value="">Semua blok</option></select>
+          <select id="kStatus" class="sel" style="flex:1;min-width:140px"><option value="">Semua kamar</option><option value="slot">Ada bed kosong</option><option value="penuh">Penuh</option><option value="kosong">Kosong total</option></select>
           <button class="btn btn-primary" onclick="loadKamar()"><i class="bi bi-search"></i> Tampilkan</button>
         </div>
         <div class="card2-head" style="border:none;padding:0 2px 12px"><span class="ct" id="count-kamar">Pilih lokasi lalu tampilkan</span></div>
@@ -357,6 +371,12 @@ tbody tr:hover{background:var(--canvas);}
               <button class="btn btn-primary" id="admBtn" onclick="tambahAdmin()"><i class="bi bi-plus-lg"></i></button>
             </div>
             <div id="adminList"><div class="empty"><span class="spin"></span></div></div>
+          </div>
+          <div class="pcard adm">
+            <h3>Pemeriksaan data</h3>
+            <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px">Cek kamar melebihi kapasitas, gender tak cocok, fasilitas janggal, atau karyawan tanpa kamar.</p>
+            <button class="btn btn-ghost" id="cekBtn" onclick="cekData()"><i class="bi bi-clipboard-check"></i> Periksa sekarang</button>
+            <div id="cekResult" style="margin-top:14px"></div>
           </div>
           <button class="btn btn-ghost" onclick="doLogout()" style="width:100%"><i class="bi bi-box-arrow-right"></i> Keluar dari akun</button>
         </div>
@@ -540,7 +560,7 @@ async function doLogout(){await sb.auth.signOut();isAdmin=false;document.body.cl
 function showLogin(){$("login").style.display="flex";$("app").style.display="none";}
 async function showApp(){
   $("login").style.display="none";$("app").style.display="block";
-  await checkAdmin();goto("beranda");
+  await checkAdmin();initFilters();goto("beranda");
 }
 async function checkSession(){const{data}=await sb.auth.getSession();data.session?showApp():showLogin();}
 async function checkAdmin(){
@@ -562,13 +582,14 @@ window.addEventListener("load",()=>{setTimeout(async()=>{const s=$("splash");s.s
 async function loadStats(){
   try{
     const{count:kar}=await sb.from("karyawan").select("nik",{count:"exact",head:true}).eq("status","aktif");
-    const{data:ks}=await sb.from("kamar_status").select("status_kamar,jumlah_bed,terisi,sisa");
+    const{data:ks}=await sb.from("kamar_status").select("lokasi_hunian,status_kamar,jumlah_bed,terisi,sisa");
     $("stKar").textContent=kar??0;$("stKamar").textContent=(ks||[]).length;
     $("stFull").textContent=(ks||[]).filter(k=>k.status_kamar==="FULL").length;
     const kosong=(ks||[]).reduce((s,k)=>s+(k.sisa||0),0),total=(ks||[]).reduce((s,k)=>s+(k.jumlah_bed||0),0),terisi=(ks||[]).reduce((s,k)=>s+(k.terisi||0),0);
     $("stKosong").textContent=kosong;
     const pct=total?Math.round(terisi/total*100):0;
     $("occText").textContent=`${terisi} / ${total} bed (${pct}%)`;$("occBar").style.width=pct+"%";
+    renderRincian(ks);
   }catch(e){}
   // recent moves preview
   const{data}=await sb.from("riwayat_pindah").select("nik,waktu,karyawan:nik(nama),ke:ke_kamar_id(block,no_kamar),ke_no_bed").order("waktu",{ascending:false}).limit(5);
@@ -577,6 +598,38 @@ async function loadStats(){
   tb.innerHTML=data.map(r=>`<tr><td class="mono" style="font-size:12px;color:var(--muted)">${fmt(r.waktu)}</td><td ${r.nik?`style="cursor:pointer" onclick="openDetail('${r.nik}')"`:""}>${r.karyawan?.nama??"-"}</td><td class="mono">${r.ke?`${r.ke.block}-${r.ke.no_kamar}/${r.ke_no_bed??"-"}`:"-"}</td></tr>`).join("");
 }
 function fmt(w){return new Date(w).toLocaleString("id-ID",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});}
+function miniBar(label,val,max){const pct=max?Math.round(val/max*100):0;
+  return `<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px"><span>${label}</span><span class="mono" style="color:var(--muted)">${val}</span></div><div class="bar" style="height:8px"><i style="width:${pct}%"></i></div></div>`;}
+function renderRincian(ks){
+  const byLok={};(ks||[]).forEach(k=>{const l=k.lokasi_hunian||"(lain)";byLok[l]=byLok[l]||{t:0,j:0};byLok[l].t+=k.terisi||0;byLok[l].j+=k.jumlah_bed||0;});
+  $("rinLokasi").innerHTML=Object.keys(byLok).sort().map(l=>miniBar(`${l} (${byLok[l].t}/${byLok[l].j})`,byLok[l].t,byLok[l].j)).join("")||'<div class="sl">—</div>';
+  sb.from("stat_ringkas").select("*").then(({data})=>{
+    if(!data)return;
+    const per=data.filter(d=>d.dim==="perusahaan").sort((a,b)=>b.jml-a.jml),maxp=Math.max(...per.map(p=>p.jml),1);
+    $("rinPerusahaan").innerHTML=per.map(p=>miniBar(p.label,p.jml,maxp)).join("")||'<div class="sl">—</div>';
+    const gen=data.filter(d=>d.dim==="gender"),gl=gen.find(g=>g.label==="L")?.jml||0,gp=gen.find(g=>g.label==="P")?.jml||0;
+    $("rinGender").innerHTML=`<div class="stat" style="flex:1"><div class="sv">${gl}</div><div class="sl">Laki-laki</div></div><div class="stat" style="flex:1"><div class="sv">${gp}</div><div class="sl">Perempuan</div></div>`;
+  });
+}
+async function initFilters(){
+  const{data}=await sb.from("stat_ringkas").select("label,dim").eq("dim","perusahaan");
+  const sel=$("fPerusahaan");if(!sel||sel.dataset.done)return;sel.dataset.done="1";
+  (data||[]).map(d=>d.label).filter(l=>l&&l!=="(tanpa)").sort().forEach(p=>{const o=document.createElement("option");o.value=p;o.textContent=p;sel.appendChild(o);});
+}
+async function cekData(){
+  const box=$("cekResult"),b=$("cekBtn");b.disabled=true;b.innerHTML='<span class="spin"></span> Memeriksa…';box.innerHTML="";
+  const issues=[];
+  const{data:ks}=await sb.from("kamar_status").select("block,no_kamar,jumlah_bed,terisi,fasilitas,golongan");
+  (ks||[]).filter(k=>k.terisi>k.jumlah_bed).forEach(k=>issues.push(`Kamar ${k.block}-${k.no_kamar}: terisi ${k.terisi} melebihi kapasitas ${k.jumlah_bed}`));
+  (ks||[]).filter(k=>k.fasilitas==="NR"&&k.golongan&&k.golongan!==1).forEach(k=>issues.push(`Kamar ${k.block}-${k.no_kamar}: fasilitas NR tapi golongan ${k.golongan} — cek kapasitas/fasilitas`));
+  const{count:noRoom}=await sb.from("karyawan").select("nik",{count:"exact",head:true}).eq("status","aktif").is("kamar_id",null);
+  if(noRoom>0)issues.push(`${noRoom} karyawan aktif belum ditempatkan di kamar`);
+  const{count:noGen}=await sb.from("karyawan").select("nik",{count:"exact",head:true}).eq("status","aktif").is("gender",null);
+  if(noGen>0)issues.push(`${noGen} karyawan aktif belum punya gender`);
+  b.disabled=false;b.innerHTML='<i class="bi bi-clipboard-check"></i> Periksa sekarang';
+  if(!issues.length){box.innerHTML=`<div style="color:var(--ok);font-size:13px;font-weight:600"><i class="bi bi-check-circle"></i> Tidak ada masalah ditemukan.</div>`;return;}
+  box.innerHTML=`<div style="font-size:12.5px;font-weight:700;color:var(--full);margin-bottom:8px">${issues.length} catatan:</div>`+issues.map(i=>`<div class="pf-row" style="font-size:12.5px"><span style="color:var(--text)">${i}</span></div>`).join("");
+}
 
 /* KARYAWAN */
 function renderCari(data){
@@ -592,17 +645,21 @@ function renderCari(data){
   cnt.textContent=`${data.length} hasil`;
 }
 let st;
-$("cariNik").addEventListener("input",e=>{
-  const v=e.target.value.trim();clearTimeout(st);
-  if(v.length<2){$("hasilCari").innerHTML=`<tr><td colspan="9" class="empty"><i class="bi bi-search"></i>Ketik nama atau NIK untuk mulai mencari.</td></tr>`;$("count-cari").textContent="Hasil pencarian";return;}
-  st=setTimeout(async()=>{
-    const safe=v.replace(/[,()%*]/g," ").trim();if(!safe)return;$("count-cari").innerHTML='<span class="spin"></span>';
-    const{data,error}=await sb.from("karyawan").select("nik,nama,gender,department,jabatan,no_bed,kamar:kamar_id(id,lokasi_hunian,block,no_kamar)").or(`nik.ilike.%${safe}%,nama.ilike.%${safe}%`).neq("status","resign").limit(25);
-    if(error){$("hasilCari").innerHTML=`<tr><td colspan="9" class="empty">Gagal memuat. Periksa koneksi lalu coba lagi.</td></tr>`;return;}
-    renderCari(data);
-  },300);
-});
-function refreshCari(){const i=$("cariNik");if(i.value.trim().length>=2)i.dispatchEvent(new Event("input"));}
+async function runSearch(){
+  const v=$("cariNik").value.trim(),per=$("fPerusahaan").value,gen=$("fGender").value,sort=$("fSort").value;
+  const hasFilter=per||gen;
+  if(v.length<2 && !hasFilter){$("hasilCari").innerHTML=`<tr><td colspan="9" class="empty"><i class="bi bi-search"></i>Ketik nama/NIK atau pilih filter untuk menampilkan.</td></tr>`;$("count-cari").textContent="Hasil pencarian";return;}
+  $("count-cari").innerHTML='<span class="spin"></span>';
+  let q=sb.from("karyawan").select("nik,nama,gender,department,jabatan,no_bed,kamar:kamar_id(id,lokasi_hunian,block,no_kamar)").neq("status","resign");
+  if(v.length>=2){const safe=v.replace(/[,()%*]/g," ").trim();q=q.or(`nik.ilike.%${safe}%,nama.ilike.%${safe}%`);}
+  if(per)q=q.eq("perusahaan",per);
+  if(gen)q=q.eq("gender",gen);
+  const{data,error}=await q.order(sort==="nik"?"nik":"nama",{ascending:true}).limit(50);
+  if(error){$("hasilCari").innerHTML=`<tr><td colspan="9" class="empty">Gagal memuat. Periksa koneksi lalu coba lagi.</td></tr>`;return;}
+  renderCari(data);
+}
+$("cariNik").addEventListener("input",()=>{clearTimeout(st);st=setTimeout(runSearch,300);});
+function refreshCari(){const v=$("cariNik").value.trim();if(v.length>=2||$("fPerusahaan").value||$("fGender").value)runSearch();}
 
 /* KAMAR */
 let kamarReady=false;
@@ -618,10 +675,15 @@ async function loadKamar(){
   area.innerHTML="";cnt.innerHTML='<span class="spin"></span> Memuat…';
   let q=sb.from("kamar_status").select("*").eq("lokasi_hunian",loc);if(blk)q=q.eq("block",blk);
   const{data,error}=await q;if(error){cnt.textContent="Gagal memuat.";return;}
-  data.sort((a,b)=>(parseInt(a.block)-parseInt(b.block))||(parseInt(a.no_kamar)-parseInt(b.no_kamar)));cnt.textContent=`${data.length} kamar`;
-  const{data:occ}=await sb.from("karyawan").select("nik,nama,no_bed,kamar_id").eq("status","aktif").in("kamar_id",data.map(d=>d.id));
+  const stt=$("kStatus").value;
+  let rooms=data;
+  if(stt==="slot")rooms=data.filter(k=>k.sisa>0);
+  else if(stt==="penuh")rooms=data.filter(k=>k.status_kamar==="FULL");
+  else if(stt==="kosong")rooms=data.filter(k=>k.status_kamar==="KOSONG");
+  rooms.sort((a,b)=>(parseInt(a.block)-parseInt(b.block))||(parseInt(a.no_kamar)-parseInt(b.no_kamar)));cnt.textContent=`${rooms.length} kamar`;
+  const{data:occ}=await sb.from("karyawan").select("nik,nama,no_bed,kamar_id").eq("status","aktif").in("kamar_id",rooms.map(d=>d.id));
   const byRoom={};(occ||[]).forEach(o=>{(byRoom[o.kamar_id]=byRoom[o.kamar_id]||[]).push(o);});
-  area.innerHTML=data.map(k=>{const ppl=(byRoom[k.id]||[]).reduce((m,p)=>{m[p.no_bed]=p;return m;},{});let beds="";
+  area.innerHTML=rooms.map(k=>{const ppl=(byRoom[k.id]||[]).reduce((m,p)=>{m[p.no_bed]=p;return m;},{});let beds="";
     for(let i=1;i<=k.jumlah_bed;i++){
       if(ppl[i]){beds+=`<div class="bedc occ" style="cursor:pointer" onclick="openDetail('${ppl[i].nik}')"><span class="bn">${i}</span><span class="nm">${ppl[i].nama}</span></div>`;}
       else{const clk=isAdmin?`onclick="openAssign(${k.id},'${k.gender}',${i},'Blok ${k.block} Kamar ${k.no_kamar}')" style="cursor:pointer"`:"";
@@ -629,7 +691,7 @@ async function loadKamar(){
     }
     return `<div class="room"><div class="rh"><span class="rt">Blok <span class="mono">${k.block}</span> · Kamar <span class="mono">${k.no_kamar}</span></span><span class="pill p-${k.status_kamar}">${k.status_kamar}</span></div>
     <div class="rm">${k.gender==="L"?"Laki-laki":"Perempuan"} · ${k.fasilitas||"-"} · <span class="mono">${k.terisi}/${k.jumlah_bed}</span> terisi</div><div class="beds">${beds}</div></div>`;}).join("");
-  if(!data.length)area.innerHTML=`<div class="empty">Tidak ada kamar untuk pilihan ini.</div>`;
+  if(!rooms.length)area.innerHTML=`<div class="empty">Tidak ada kamar untuk pilihan ini.</div>`;
 }
 
 /* RIWAYAT */
