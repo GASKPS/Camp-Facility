@@ -234,7 +234,7 @@ tbody tr:hover{background:var(--canvas);}
 <div class="shell">
   <!-- SIDEBAR -->
   <aside class="sidebar">
-    <div class="brand"><img src="logo-perusahaan.png" alt=""><div><b>Mess Karyawan</b><small>Camp & Facility</small></div></div>
+    <div class="brand"><img src="logo-perusahaan.png" alt=""><div><b>Mess Karyawan</b><small>PT Karunia Permai Sentosa</small></div></div>
     <nav class="nav">
       <button class="nav-item on" data-section="beranda" onclick="goto('beranda')"><i class="bi bi-grid-1x2"></i> Beranda</button>
       <button class="nav-item" data-section="karyawan" onclick="goto('karyawan')"><i class="bi bi-people"></i> Karyawan</button>
@@ -336,7 +336,7 @@ tbody tr:hover{background:var(--canvas);}
         <div class="card2">
           <div class="card2-head"><span class="ct" id="count-resign">Daftar karyawan resign</span></div>
           <div class="tbl-wrap"><table>
-            <thead><tr><th>NIK</th><th>Nama</th><th>Dept</th><th>Perusahaan</th><th>Tgl resign</th><th>Alasan</th></tr></thead>
+            <thead><tr><th>NIK</th><th>Nama</th><th>Dept</th><th>Perusahaan</th><th>Tgl resign</th><th>Alasan</th><th>Potongan</th></tr></thead>
             <tbody id="hasilResign"><tr><td colspan="6" class="empty"><span class="spin"></span></td></tr></tbody>
           </table></div>
         </div>
@@ -371,6 +371,16 @@ tbody tr:hover{background:var(--canvas);}
               <button class="btn btn-primary" id="admBtn" onclick="tambahAdmin()"><i class="bi bi-plus-lg"></i></button>
             </div>
             <div id="adminList"><div class="empty"><span class="spin"></span></div></div>
+          </div>
+          <div class="pcard adm">
+            <h3>Kelola aset &amp; harga</h3>
+            <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px">Daftar aset & harga yang dipakai saat menghitung potongan resign.</p>
+            <div class="alert" id="asetErr"></div>
+            <div id="asetKelola"></div>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button class="btn btn-ghost" style="flex:1" onclick="tambahBarisAset()"><i class="bi bi-plus-lg"></i> Tambah item</button>
+              <button class="btn btn-primary" style="flex:1" id="asetSaveBtn" onclick="simpanAset()"><i class="bi bi-save"></i> Simpan</button>
+            </div>
           </div>
           <div class="pcard adm">
             <h3>Pemeriksaan data</h3>
@@ -443,13 +453,14 @@ tbody tr:hover{background:var(--canvas);}
       <div class="fld"><label>Tanggal resign</label><input id="eTglResign" type="date" class="inp"></div>
       <div class="fld"><label>Alasan resign</label><input id="eAlasan" class="inp" placeholder="mis. kontrak habis"></div>
     </div>
+    <div class="fld"><label>Pengembalian aset <span style="color:var(--muted);font-weight:400">(centang yang dikembalikan)</span></label>
+      <div id="asetReturn" style="margin-top:4px"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
+        <b style="font-size:13px">Total potongan</b>
+        <b class="mono" id="potonganTotal" style="font-size:15px;color:var(--full)">Rp 0</b>
+      </div>
+    </div>
   </div>
-  <div class="fld"><label>Aset sudah diambil</label>
-    <div style="display:flex;gap:16px;margin-top:4px;font-size:13px">
-      <label><input type="checkbox" id="eBk"> Bantal kepala</label>
-      <label><input type="checkbox" id="eBg"> Bantal guling</label>
-      <label><input type="checkbox" id="eBd"> Bedding</label>
-    </div></div>
   <div class="alert" id="eErr"></div>
   <div style="display:flex;gap:10px;margin-top:16px">
     <button class="btn btn-ghost" style="flex:1" onclick="closeEdit()">Batal</button>
@@ -522,6 +533,27 @@ const sb=supabase.createClient(
  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56YndqcWxhaGJxcWFzbnprYXltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyOTkyNTEsImV4cCI6MjA5Nzg3NTI1MX0.KX2utEHMvmOS8XuMNc1JtfFR0q1rbOwLOFjeUTur_9U"
 );
 let isAdmin=false,lastResults={},moveCtx=null,mvBed=null,editOldNik=null,curUser=null;
+let asetList=[],asetMap={};
+function rp(n){return "Rp "+(Number(n)||0).toLocaleString("id-ID");}
+async function loadAset(){
+  const{data}=await sb.from("aset").select("*").order("urutan").order("id");
+  asetList=data||[];asetMap={};asetList.forEach(a=>asetMap[a.id]=a.nama);
+}
+function renderAsetChecklist(checkedIds){
+  const box=$("asetReturn");if(!box)return;
+  box.innerHTML=asetList.map(a=>{
+    const on=checkedIds?checkedIds.includes(a.id):true;
+    return `<label style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;font-size:13px;border-bottom:1px solid var(--line)">
+      <span style="display:flex;align-items:center;gap:9px"><input type="checkbox" data-id="${a.id}" data-harga="${a.harga}" ${on?"checked":""} onchange="hitungPotongan()"> ${a.nama}</span>
+      <span class="mono" style="color:var(--muted)">${rp(a.harga)}</span></label>`;
+  }).join("")||'<div class="sl" style="color:var(--muted)">Belum ada item aset.</div>';
+  hitungPotongan();
+}
+function hitungPotongan(){
+  const boxes=[...document.querySelectorAll("#asetReturn input[type=checkbox]")];
+  const tot=boxes.filter(b=>!b.checked).reduce((s,b)=>s+Number(b.dataset.harga||0),0);
+  $("potonganTotal").textContent=rp(tot);
+}
 const titles={beranda:"Beranda",karyawan:"Karyawan",kamar:"Kamar",riwayat:"Riwayat",resign:"Karyawan resign",profil:"Profil"};
 
 function toggleDark(){document.body.classList.toggle("dark");localStorage.setItem("dark",document.body.classList.contains("dark")?"on":"off");}
@@ -560,7 +592,7 @@ async function doLogout(){await sb.auth.signOut();isAdmin=false;document.body.cl
 function showLogin(){$("login").style.display="flex";$("app").style.display="none";}
 async function showApp(){
   $("login").style.display="none";$("app").style.display="block";
-  await checkAdmin();initFilters();goto("beranda");
+  await checkAdmin();initFilters();loadAset();goto("beranda");
 }
 async function checkSession(){const{data}=await sb.auth.getSession();data.session?showApp():showLogin();}
 async function checkAdmin(){
@@ -721,7 +753,40 @@ async function loadProfil(){
       const btn=self?`<span class="role user">Anda</span>`:`<button class="actbtn" title="Cabut admin" onclick="cabutAdmin('${(a.email||"").replace(/'/g,"")}')"><i class="bi bi-x-lg"></i></button>`;
       return `<div class="adminrow"><div class="ad-av">${(a.email||"?").slice(0,2).toUpperCase()}</div><div style="flex:1;min-width:0"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis">${a.email||"(tanpa email)"}</div></div>${btn}</div>`;
     }).join("")||`<div class="empty">Belum ada admin terdaftar.</div>`;
+    renderKelolaAset();
   }
+}
+function renderKelolaAset(){
+  const box=$("asetKelola");if(!box)return;$("asetErr").style.display="none";
+  box.innerHTML=asetList.map(a=>barisAsetHTML(a.id,a.nama,a.harga)).join("");
+}
+function barisAsetHTML(id,nama,harga){
+  return `<div class="asetrow" data-id="${id||""}" style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+    <input class="inp aset-nama" value="${(nama||"").replace(/"/g,"&quot;")}" placeholder="Nama aset" style="flex:1">
+    <input class="inp aset-harga mono" value="${harga||0}" inputmode="numeric" placeholder="0" style="width:120px">
+    <button class="actbtn" title="Hapus" onclick="hapusBarisAset(this)"><i class="bi bi-trash"></i></button>
+  </div>`;
+}
+function tambahBarisAset(){$("asetKelola").insertAdjacentHTML("beforeend",barisAsetHTML("","",0));}
+async function hapusBarisAset(btn){
+  const rowEl=btn.closest(".asetrow"),id=rowEl.dataset.id;
+  if(id){if(!confirm("Hapus item aset ini?"))return;const{error}=await sb.from("aset").delete().eq("id",Number(id));if(error){const e=$("asetErr");e.textContent=error.message||"Gagal menghapus.";e.style.display="block";return;}}
+  rowEl.remove();
+}
+async function simpanAset(){
+  const b=$("asetSaveBtn"),er=$("asetErr");er.style.display="none";b.disabled=true;b.innerHTML='<span class="spin"></span>';
+  try{
+    const rows=[...document.querySelectorAll("#asetKelola .asetrow")];
+    for(let i=0;i<rows.length;i++){
+      const el=rows[i],id=el.dataset.id,nama=el.querySelector(".aset-nama").value.trim();
+      const harga=parseInt((el.querySelector(".aset-harga").value||"0").replace(/[^\d]/g,""))||0;
+      if(!nama)continue;
+      if(id){await sb.from("aset").update({nama,harga,urutan:i+1}).eq("id",Number(id));}
+      else{await sb.from("aset").insert({nama,harga,urutan:i+1});}
+    }
+    await loadAset();renderKelolaAset();toast("Aset & harga tersimpan ✓");
+  }catch(e){er.textContent="Gagal menyimpan aset.";er.style.display="block";}
+  b.disabled=false;b.innerHTML='<i class="bi bi-save"></i> Simpan';
 }
 async function doChangePass(){
   const p1=$("npass").value,p2=$("npass2").value,b=$("pwBtn"),er=$("pwErr");er.style.display="none";
@@ -769,14 +834,18 @@ async function openEdit(nik){if(!isAdmin)return;const{data,error}=await sb.from(
   eDept.value=data.department||"";eJab.value=data.jabatan||"";ePerusahaan.value=data.perusahaan||"";ePoh.value=data.point_of_hire||"";
   eTmk.value=data.tgl_masuk_kerja||"";eTmm.value=data.tgl_masuk_mess||"";eStatus.value=data.status||"aktif";
   $("eTglResign").value=data.tgl_resign||"";$("eAlasan").value=data.alasan_resign||"";toggleResign();
-  eBk.checked=!!data.pengambilan_bantal;eBg.checked=!!data.pengambilan_bantal_guling;eBd.checked=!!data.pengambilan_bedding;
+  renderAsetChecklist(Array.isArray(data.aset_kembali)?data.aset_kembali:null);
   $("eErr").style.display="none";$("editModal").classList.add("show");}
 function closeEdit(){$("editModal").classList.remove("show");}
 function toggleResign(){const on=$("eStatus").value==="resign";$("resignBlock").style.display=on?"":"none";if(on&&!$("eTglResign").value)$("eTglResign").value=new Date().toISOString().slice(0,10);}
 async function doEdit(){const nik=eNik.value.trim();if(!nik){const e=$("eErr");e.textContent="NIK tidak boleh kosong.";e.style.display="block";return;}
   const b=$("eSave");b.disabled=true;b.innerHTML='<span class="spin"></span>';$("eErr").style.display="none";
   const resign=$("eStatus").value==="resign";
-  const p={nik,nama:eNama.value.trim(),gender:eGender.value||null,gol:eGol.value.trim()||null,fasilitas:eFasilitas.value||null,department:eDept.value.trim()||null,jabatan:eJab.value.trim()||null,perusahaan:ePerusahaan.value.trim()||null,point_of_hire:ePoh.value.trim()||null,tgl_masuk_kerja:eTmk.value||null,tgl_masuk_mess:eTmm.value||null,status:eStatus.value,tgl_resign:resign?($("eTglResign").value||null):null,alasan_resign:resign?($("eAlasan").value.trim()||null):null,pengambilan_bantal:eBk.checked,pengambilan_bantal_guling:eBg.checked,pengambilan_bedding:eBd.checked};
+  let aset_kembali=null,potongan=null;
+  if(resign){const boxes=[...document.querySelectorAll("#asetReturn input[type=checkbox]")];
+    aset_kembali=boxes.filter(b=>b.checked).map(b=>Number(b.dataset.id));
+    potongan=boxes.filter(b=>!b.checked).reduce((s,b)=>s+Number(b.dataset.harga||0),0);}
+  const p={nik,nama:eNama.value.trim(),gender:eGender.value||null,gol:eGol.value.trim()||null,fasilitas:eFasilitas.value||null,department:eDept.value.trim()||null,jabatan:eJab.value.trim()||null,perusahaan:ePerusahaan.value.trim()||null,point_of_hire:ePoh.value.trim()||null,tgl_masuk_kerja:eTmk.value||null,tgl_masuk_mess:eTmm.value||null,status:eStatus.value,tgl_resign:resign?($("eTglResign").value||null):null,alasan_resign:resign?($("eAlasan").value.trim()||null):null,aset_kembali:aset_kembali,potongan:potongan};
   const{error}=await sb.from("karyawan").update(p).eq("nik",editOldNik);
   b.disabled=false;b.textContent="Simpan perubahan";
   if(error){const e=$("eErr");e.textContent=error.message||"Gagal menyimpan.";e.style.display="block";return;}
@@ -785,17 +854,18 @@ async function doEdit(){const nik=eNik.value.trim();if(!nik){const e=$("eErr");e
 /* RESIGN */
 async function loadResign(term){
   const tb=$("hasilResign"),cnt=$("count-resign");
-  tb.innerHTML=`<tr><td colspan="6" class="empty"><span class="spin"></span></td></tr>`;
-  let q=sb.from("karyawan").select("nik,nama,department,perusahaan,tgl_resign,alasan_resign").eq("status","resign");
+  tb.innerHTML=`<tr><td colspan="7" class="empty"><span class="spin"></span></td></tr>`;
+  let q=sb.from("karyawan").select("nik,nama,department,perusahaan,tgl_resign,alasan_resign,potongan").eq("status","resign");
   if(term&&term.length>=2){const safe=term.replace(/[,()%*]/g," ").trim();q=q.or(`nik.ilike.%${safe}%,nama.ilike.%${safe}%`);}
   const{data,error}=await q.order("tgl_resign",{ascending:false,nullsFirst:false}).limit(100);
-  if(error){tb.innerHTML=`<tr><td colspan="6" class="empty">Gagal memuat data resign.</td></tr>`;return;}
-  if(!data.length){tb.innerHTML=`<tr><td colspan="6" class="empty">Belum ada karyawan resign.</td></tr>`;cnt.textContent="0 resign";return;}
+  if(error){tb.innerHTML=`<tr><td colspan="7" class="empty">Gagal memuat data resign.</td></tr>`;return;}
+  if(!data.length){tb.innerHTML=`<tr><td colspan="7" class="empty">Belum ada karyawan resign.</td></tr>`;cnt.textContent="0 resign";return;}
   cnt.textContent=`${data.length} resign`;
   tb.innerHTML=data.map(r=>`<tr><td class="mono" style="font-size:12px">${r.nik}</td>
     <td style="font-weight:600;cursor:pointer" onclick="openDetail('${r.nik}')">${r.nama??"-"}</td>
     <td style="color:var(--muted)">${r.department??"-"}</td><td style="color:var(--muted)">${r.perusahaan??"-"}</td>
-    <td class="mono">${r.tgl_resign??"-"}</td><td style="color:var(--muted)">${r.alasan_resign??"-"}</td></tr>`).join("");
+    <td class="mono">${r.tgl_resign??"-"}</td><td style="color:var(--muted)">${r.alasan_resign??"-"}</td>
+    <td class="mono" style="color:${r.potongan?'var(--full)':'var(--muted)'}">${r.potongan?rp(r.potongan):"-"}</td></tr>`).join("");
 }
 let rsTimer;
 $("cariResign").addEventListener("input",e=>{clearTimeout(rsTimer);const v=e.target.value.trim();rsTimer=setTimeout(()=>loadResign(v),300);});
@@ -808,7 +878,10 @@ async function openDetail(nik){
   lastResults[r.nik]={nik:r.nik,nama:r.nama,gender:r.gender,no_bed:r.no_bed,kamar:r.kamar?{id:r.kamar_id,block:r.kamar.block,no_kamar:r.kamar.no_kamar,lokasi_hunian:r.kamar.lokasi_hunian}:null};
   $("dAv").textContent=(r.nama||"?").slice(0,2).toUpperCase();
   $("dNama").textContent=r.nama||"-";$("dNik").textContent=r.nik||"-";
-  const aset=[r.pengambilan_bantal?"Bantal kepala":null,r.pengambilan_bantal_guling?"Guling":null,r.pengambilan_bedding?"Bedding":null].filter(Boolean).join(", ")||"—";
+  const isR=(r.status==="resign"||r.tgl_resign);
+  const kembali=Array.isArray(r.aset_kembali)?r.aset_kembali:[];
+  const namaKembali=kembali.map(id=>asetMap[id]).filter(Boolean).join(", ")||"—";
+  const tdkKembali=asetList.filter(a=>!kembali.includes(a.id)).map(a=>a.nama).join(", ")||"—";
   const loc=r.kamar?`${r.kamar.lokasi_hunian||"-"} · Blok ${r.kamar.block}-${r.kamar.no_kamar} / bed ${r.no_bed??"-"}`:"Belum ditempatkan";
   $("dRows").innerHTML=
     row("Status", `<span class="role ${r.status==='aktif'?'admin':'user'}">${r.status||"-"}</span>`)+
@@ -818,8 +891,9 @@ async function openDetail(nik){
     row("Perusahaan", r.perusahaan)+row("Point of Hire", r.point_of_hire)+
     row("Masuk kerja", r.tgl_masuk_kerja)+row("Masuk mess", r.tgl_masuk_mess)+
     row("Hunian", loc)+
-    ((r.status==="resign"||r.tgl_resign)?row("Tanggal resign", r.tgl_resign)+row("Alasan resign", r.alasan_resign):"")+
-    row("Aset diambil", aset);
+    (isR?row("Tanggal resign", r.tgl_resign)+row("Alasan resign", r.alasan_resign)
+        +row("Aset dikembalikan", namaKembali)+row("Aset tidak kembali", tdkKembali)
+        +row("Potongan", `<b style="color:var(--full)">${rp(r.potongan)}</b>`):"");
   $("dEditBtn").onclick=()=>{closeDetail();openEdit(r.nik);};
   $("dMoveBtn").onclick=()=>{closeDetail();openMove(r.nik);};
   $("detailModal").classList.add("show");
