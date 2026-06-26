@@ -243,6 +243,7 @@ tbody tr:hover{background:var(--canvas);}
       <button class="nav-item" data-section="karyawan" onclick="goto('karyawan')"><i class="bi bi-people"></i> Karyawan</button>
       <button class="nav-item" data-section="kamar" onclick="goto('kamar')"><i class="bi bi-door-open"></i> Kamar</button>
       <button class="nav-item" data-section="riwayat" onclick="goto('riwayat')"><i class="bi bi-clock-history"></i> Riwayat</button>
+      <button class="nav-item" data-section="pindahan" onclick="goto('pindahan')"><i class="bi bi-truck"></i> Pindahan</button>
       <button class="nav-item" data-section="resign" onclick="goto('resign')"><i class="bi bi-person-dash"></i> Resign</button>
       <button class="nav-item" data-section="profil" onclick="goto('profil')"><i class="bi bi-person-circle"></i> Profil</button>
     </nav>
@@ -351,6 +352,18 @@ tbody tr:hover{background:var(--canvas);}
         </div>
       </section>
 
+      <!-- PINDAHAN -->
+      <section class="panel" id="sec-pindahan">
+        <div class="search-wrap"><i class="bi bi-search"></i><input id="cariPindahan" class="inp" placeholder="Cari nama yang menunggu diantar…"></div>
+        <div class="card2">
+          <div class="card2-head"><span class="ct" id="count-pindahan">Menunggu diantar</span></div>
+          <div class="tbl-wrap"><table>
+            <thead><tr><th>Waktu pindah</th><th>Nama</th><th>Dept</th><th>Jabatan</th><th>Dari</th><th>Ke</th><th>Oleh</th><th>Aksi</th></tr></thead>
+            <tbody id="hasilPindahan"><tr><td colspan="6" class="empty"><span class="spin"></span></td></tr></tbody>
+          </table></div>
+        </div>
+      </section>
+
       <!-- RESIGN -->
       <section class="panel" id="sec-resign">
         <div class="search-wrap"><i class="bi bi-search"></i><input id="cariResign" class="inp" placeholder="Cari karyawan resign…"></div>
@@ -428,6 +441,7 @@ tbody tr:hover{background:var(--canvas);}
   <button class="bn-item" data-section="karyawan" onclick="goto('karyawan')"><i class="bi bi-people"></i>Karyawan</button>
   <button class="bn-item" data-section="kamar" onclick="goto('kamar')"><i class="bi bi-door-open"></i>Kamar</button>
   <button class="bn-item" data-section="riwayat" onclick="goto('riwayat')"><i class="bi bi-clock-history"></i>Riwayat</button>
+  <button class="bn-item" data-section="pindahan" onclick="goto('pindahan')"><i class="bi bi-truck"></i>Pindahan</button>
   <button class="bn-item" data-section="resign" onclick="goto('resign')"><i class="bi bi-person-dash"></i>Resign</button>
   <button class="bn-item" data-section="profil" onclick="goto('profil')"><i class="bi bi-person"></i>Profil</button>
 </nav>
@@ -628,7 +642,7 @@ function hitungPotongan(){
   const tot=boxes.filter(b=>!b.checked).reduce((s,b)=>s+Number(b.dataset.harga||0),0);
   $("potonganTotal").textContent=rp(tot);
 }
-const titles={beranda:"Beranda",karyawan:"Karyawan",kamar:"Kamar",riwayat:"Riwayat",resign:"Karyawan resign",profil:"Profil"};
+const titles={beranda:"Beranda",karyawan:"Karyawan",kamar:"Kamar",riwayat:"Riwayat",pindahan:"Pindahan",resign:"Karyawan resign",profil:"Profil"};
 
 function toggleDark(){document.body.classList.toggle("dark");localStorage.setItem("dark",document.body.classList.contains("dark")?"on":"off");}
 if(localStorage.getItem("dark")==="on")document.body.classList.add("dark");
@@ -646,6 +660,7 @@ function goto(sec){
   if(sec==="beranda")loadStats();
   if(sec==="kamar")initKamarTab();
   if(sec==="riwayat")switchRiwayat("pindah");
+  if(sec==="pindahan")loadPindahan();
   if(sec==="resign")loadResign($("cariResign").value.trim());
   if(sec==="profil")loadProfil();
   window.scrollTo(0,0);
@@ -777,6 +792,7 @@ function refreshCurrent(){
   else if(id==="sec-kamar")loadKamar();
   else if(id==="sec-riwayat")switchRiwayat($("segHapus").classList.contains("on")?"hapus":"pindah");
   else if(id==="sec-resign")loadResign($("cariResign").value.trim());
+  else if(id==="sec-pindahan")loadPindahan($("cariPindahan").value.trim());
 }
 
 /* KAMAR */
@@ -1048,8 +1064,37 @@ async function doEdit(){const nik=eNik.value.trim();if(!nik){const e=$("eErr");e
   if(error){const e=$("eErr");e.textContent=error.message||"Gagal menyimpan.";e.style.display="block";return;}
   closeEdit();toast("Data tersimpan ✓");refreshCurrent();loadStats();}
 
-/* RESIGN */
-async function loadResign(term){
+/* PINDAHAN (menunggu diantar) */
+async function loadPindahan(term){
+  const tb=$("hasilPindahan"),cnt=$("count-pindahan");if(!tb)return;
+  tb.innerHTML=`<tr><td colspan="8" class="empty"><span class="spin"></span></td></tr>`;
+  let q=sb.from("riwayat_pindah").select("id,nik,waktu,oleh_email,karyawan:nik(nama,department,jabatan),dari:dari_kamar_id(block,no_kamar),ke:ke_kamar_id(block,no_kamar),dari_no_bed,ke_no_bed").eq("diantar",false);
+  if(term&&term.length>=2){const s=term.replace(/[,()%*]/g," ").trim();
+    const{data:kx}=await sb.from("karyawan").select("nik").or(`nik.ilike.%${s}%,nama.ilike.%${s}%`).limit(300);
+    const niks=(kx||[]).map(k=>k.nik);if(niks.length)q=q.in("nik",niks);else q=q.eq("nik","__none__");
+  }
+  const{data,error}=await q.order("waktu",{ascending:false}).limit(200);
+  if(error){tb.innerHTML=`<tr><td colspan="8" class="empty">Gagal memuat.</td></tr>`;return;}
+  if(!data||!data.length){tb.innerHTML=`<tr><td colspan="8" class="empty">${term?"Tidak ada yang cocok.":"Tidak ada pindahan yang menunggu diantar. 🎉"}</td></tr>`;if(cnt)cnt.textContent=term?"0 hasil":"Menunggu diantar";return;}
+  if(cnt)cnt.textContent=`${data.length} menunggu diantar`;
+  tb.innerHTML=data.map(r=>`<tr><td class="mono" style="font-size:12px;color:var(--muted)">${fmt(r.waktu)}</td>
+    <td ${r.nik?`style="font-weight:600;cursor:pointer" onclick="openDetail('${r.nik}')"`:`style="font-weight:600"`}>${r.karyawan?.nama??"-"}</td>
+    <td style="color:var(--muted)">${r.karyawan?.department??"-"}</td>
+    <td style="color:var(--muted)">${r.karyawan?.jabatan??"-"}</td>
+    <td class="mono" style="color:var(--muted)">${r.dari?`${r.dari.block}-${r.dari.no_kamar}`:"-"}</td>
+    <td class="mono">${r.ke?`${r.ke.block}-${r.ke.no_kamar}`:"-"}</td>
+    <td style="color:var(--muted);font-size:12px">${(r.oleh_email||"-").split("@")[0]}</td>
+    <td><button class="btn btn-primary" style="padding:6px 12px;font-size:12.5px" onclick="tandaiDiantar(${r.id})"><i class="bi bi-check-lg"></i> Sudah diantar</button></td></tr>`).join("");
+}
+async function tandaiDiantar(id){
+  const{error}=await sb.rpc("tandai_diantar",{p_id:id});
+  if(error){toast(error.message||"Gagal menandai");return;}
+  toast("Ditandai sudah diantar ✓");loadPindahan($("cariPindahan").value.trim());
+}
+let pdTimer;
+$("cariPindahan").addEventListener("input",e=>{clearTimeout(pdTimer);const v=e.target.value.trim();pdTimer=setTimeout(()=>loadPindahan(v),300);});
+
+/* RESIGN */async function loadResign(term){
   const tb=$("hasilResign"),cnt=$("count-resign");
   tb.innerHTML=`<tr><td colspan="7" class="empty"><span class="spin"></span></td></tr>`;
   let q=sb.from("karyawan").select("nik,nama,department,perusahaan,tgl_resign,alasan_resign,potongan").eq("status","resign");
