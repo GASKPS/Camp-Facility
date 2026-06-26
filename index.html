@@ -300,6 +300,7 @@ tbody tr:hover{background:var(--canvas);}
           <select id="fPerusahaan" class="sel" style="flex:1;min-width:150px" onchange="runSearch()"><option value="">Semua perusahaan</option></select>
           <select id="fGender" class="sel" style="flex:1;min-width:130px" onchange="runSearch()"><option value="">Semua gender</option><option value="L">Laki-laki</option><option value="P">Perempuan</option></select>
           <select id="fSort" class="sel" style="flex:1;min-width:130px" onchange="runSearch()"><option value="nama">Urut: Nama</option><option value="nik">Urut: NIK</option></select>
+          <select id="fHunian" class="sel" style="flex:1;min-width:160px" onchange="runSearch()"><option value="">Semua penempatan</option><option value="tanpa">Belum punya kamar</option><option value="ada">Sudah punya kamar</option></select>
         </div>
         <div class="card2">
           <div class="card2-head"><span class="ct" id="count-cari">Hasil pencarian</span><div style="display:flex;gap:16px"><button class="linkbtn adm" onclick="openAdd()"><i class="bi bi-person-plus"></i> Tambah karyawan</button><button class="linkbtn" onclick="screenshotTabel()"><i class="bi bi-camera"></i> Screenshot</button></div></div>
@@ -318,7 +319,7 @@ tbody tr:hover{background:var(--canvas);}
           <select id="kStatus" class="sel" style="flex:1;min-width:140px"><option value="">Semua kamar</option><option value="slot">Ada bed kosong</option><option value="penuh">Penuh</option><option value="kosong">Kosong total</option></select>
           <button class="btn btn-primary" onclick="loadKamar()"><i class="bi bi-search"></i> Tampilkan</button>
         </div>
-        <div class="card2-head" style="border:none;padding:0 2px 12px"><span class="ct" id="count-kamar">Pilih lokasi lalu tampilkan</span><button class="linkbtn adm" onclick="openTambahKamar()"><i class="bi bi-plus-square"></i> Tambah kamar</button></div>
+        <div class="card2-head" style="border:none;padding:0 2px 12px"><span class="ct" id="count-kamar">Pilih lokasi lalu tampilkan</span><button class="linkbtn sadm" onclick="openTambahKamar()"><i class="bi bi-plus-square"></i> Tambah kamar</button></div>
         <div id="kamarArea" class="rooms"></div>
       </section>
 
@@ -566,7 +567,7 @@ tbody tr:hover{background:var(--canvas);}
   <div class="fld"><label>Catatan</label><input id="kmCatatan" class="inp" placeholder="mis. AC rusak, kamar mandi bocor"></div>
   <div class="alert" id="kmErr"></div>
   <div style="display:flex;gap:10px;margin-top:16px">
-    <button class="btn btn-ghost" title="Hapus kamar" onclick="hapusKamar()" style="color:var(--full);border-color:var(--full)"><i class="bi bi-trash"></i></button>
+    <button class="btn btn-ghost sadm" title="Hapus kamar" onclick="hapusKamar()" style="color:var(--full);border-color:var(--full)"><i class="bi bi-trash"></i></button>
     <button class="btn btn-ghost" style="flex:1" onclick="closeKamar()">Batal</button>
     <button class="btn btn-primary" style="flex:1" id="kmSave" onclick="doSimpanKamar()">Simpan</button>
   </div>
@@ -605,7 +606,7 @@ const sb=supabase.createClient(
  "https://nzbwjqlahbqqasnzkaym.supabase.co",
  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56YndqcWxhaGJxcWFzbnprYXltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyOTkyNTEsImV4cCI6MjA5Nzg3NTI1MX0.KX2utEHMvmOS8XuMNc1JtfFR0q1rbOwLOFjeUTur_9U"
 );
-let isAdmin=false,lastResults={},moveCtx=null,mvBed=null,editOldNik=null,curUser=null,kamarRows={};
+let isAdmin=false,isSuper=false,lastResults={},moveCtx=null,mvBed=null,editOldNik=null,curUser=null,kamarRows={};
 let asetList=[],asetMap={};
 function rp(n){return "Rp "+(Number(n)||0).toLocaleString("id-ID");}
 async function loadAset(){
@@ -636,6 +637,8 @@ function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");set
 
 /* NAV */
 function goto(sec){
+  if(!titles[sec])sec="beranda";
+  localStorage.setItem("sec",sec);
   document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
   $("sec-"+sec).classList.add("active");
   document.querySelectorAll(".nav-item,.bn-item").forEach(n=>n.classList.toggle("on",n.dataset.section===sec));
@@ -665,20 +668,20 @@ async function doLogout(){await sb.auth.signOut();isAdmin=false;document.body.cl
 function showLogin(){$("login").style.display="flex";$("app").style.display="none";}
 async function showApp(){
   $("login").style.display="none";$("app").style.display="block";
-  await checkAdmin();initFilters();loadAset();goto("beranda");
+  await checkAdmin();initFilters();loadAset();goto(localStorage.getItem("sec")||"beranda");
 }
 async function checkSession(){const{data}=await sb.auth.getSession();data.session?showApp():showLogin();}
 async function checkAdmin(){
   const{data:{user}}=await sb.auth.getUser();curUser=user;
-  if(!user){isAdmin=false;return;}
-  const{data}=await sb.from("admins").select("user_id").eq("user_id",user.id).maybeSingle();
-  isAdmin=!!data;document.body.classList.toggle("is-admin",isAdmin);
-  // hide admin-only blocks via class
+  if(!user){isAdmin=false;isSuper=false;return;}
+  const{data}=await sb.from("admins").select("user_id,super").eq("user_id",user.id).maybeSingle();
+  isAdmin=!!data;isSuper=!!(data&&data.super);document.body.classList.toggle("is-admin",isAdmin);
   document.querySelectorAll(".adm").forEach(e=>e.style.display=isAdmin?"":"none");
+  document.querySelectorAll(".sadm").forEach(e=>e.style.display=isSuper?"":"none");
   const ini=(user.email||"?").slice(0,2).toUpperCase();
   $("sideAv").textContent=ini;$("topAv").textContent=ini;
   $("sideName").textContent=(user.email||"").split("@")[0];
-  $("sideRole").textContent=isAdmin?"Administrator":"Pengguna";
+  $("sideRole").textContent=isSuper?"Super Admin":isAdmin?"Administrator":"Pengguna";
 }
 ["loginUser","loginPass"].forEach(id=>$(id).addEventListener("keydown",e=>{if(e.key==="Enter")doLogin();}));
 window.addEventListener("load",()=>{setTimeout(async()=>{const s=$("splash");s.style.opacity="0";setTimeout(()=>s.style.display="none",500);await checkSession();},700);});
@@ -751,20 +754,30 @@ function renderCari(data){
 }
 let st;
 async function runSearch(){
-  const v=$("cariNik").value.trim(),per=$("fPerusahaan").value,gen=$("fGender").value,sort=$("fSort").value;
-  const hasFilter=per||gen;
+  const v=$("cariNik").value.trim(),per=$("fPerusahaan").value,gen=$("fGender").value,sort=$("fSort").value,hun=$("fHunian").value;
+  const hasFilter=per||gen||hun;
   if(v.length<2 && !hasFilter){$("hasilCari").innerHTML=`<tr><td colspan="9" class="empty"><i class="bi bi-search"></i>Ketik nama/NIK atau pilih filter untuk menampilkan.</td></tr>`;$("count-cari").textContent="Hasil pencarian";return;}
   $("count-cari").innerHTML='<span class="spin"></span>';
   let q=sb.from("karyawan").select("nik,nama,gender,department,jabatan,no_bed,kamar:kamar_id(id,lokasi_hunian,block,no_kamar)").neq("status","resign");
   if(v.length>=2){const safe=v.replace(/[,()%*]/g," ").trim();q=q.or(`nik.ilike.%${safe}%,nama.ilike.%${safe}%`);}
   if(per)q=q.eq("perusahaan",per);
   if(gen)q=q.eq("gender",gen);
+  if(hun==="tanpa")q=q.is("kamar_id",null);
+  else if(hun==="ada")q=q.not("kamar_id","is",null);
   const{data,error}=await q.order(sort==="nik"?"nik":"nama",{ascending:true}).limit(50);
   if(error){$("hasilCari").innerHTML=`<tr><td colspan="9" class="empty">Gagal memuat. Periksa koneksi lalu coba lagi.</td></tr>`;return;}
   renderCari(data);
 }
 $("cariNik").addEventListener("input",()=>{clearTimeout(st);st=setTimeout(runSearch,300);});
-function refreshCari(){const v=$("cariNik").value.trim();if(v.length>=2||$("fPerusahaan").value||$("fGender").value)runSearch();}
+function refreshCari(){const v=$("cariNik").value.trim();if(v.length>=2||$("fPerusahaan").value||$("fGender").value||$("fHunian").value)runSearch();}
+function refreshCurrent(){
+  const act=document.querySelector(".panel.active"),id=act?act.id:"";
+  if(id==="sec-beranda")loadStats();
+  else if(id==="sec-karyawan")refreshCari();
+  else if(id==="sec-kamar")loadKamar();
+  else if(id==="sec-riwayat")switchRiwayat($("segHapus").classList.contains("on")?"hapus":"pindah");
+  else if(id==="sec-resign")loadResign($("cariResign").value.trim());
+}
 
 /* KAMAR */
 let kamarReady=false;
@@ -817,7 +830,7 @@ async function doSimpanKamar(){const id=Number($("kmSave").dataset.id),b=$("kmSa
   b.disabled=false;b.textContent="Simpan";
   if(error){er.textContent=error.message||"Gagal menyimpan.";er.style.display="block";return;}
   closeKamar();toast("Kamar tersimpan ✓");loadKamar();loadStats();}
-function openTambahKamar(){if(!isAdmin)return;
+function openTambahKamar(){if(!isSuper)return;
   ["nkLokasi","nkFloor","nkBlock","nkNo","nkGol"].forEach(id=>$(id).value="");
   $("nkBed").value="4";$("nkGender").value="";$("nkFas").value="";$("nkErr").style.display="none";
   $("lokasiList").innerHTML=[...$("kLokasi").options].filter(o=>o.value).map(o=>`<option value="${o.value}">`).join("");
@@ -842,7 +855,7 @@ async function hapusKaryawan(){const nik=editOldNik;if(!nik||!isAdmin)return;
   if(!confirm(`Hapus karyawan "${nama}" (NIK ${nik}) secara permanen?\nData & riwayat pindahnya ikut terhapus. Tidak bisa dibatalkan.`))return;
   const{error}=await sb.rpc("hapus_karyawan",{p_nik:nik});
   if(error){const e=$("eErr");e.textContent=error.message||"Gagal menghapus.";e.style.display="block";return;}
-  closeEdit();toast("Karyawan dihapus");refreshCari();loadStats();}
+  closeEdit();toast("Karyawan dihapus");refreshCurrent();loadStats();}
 async function hapusKamar(){const id=Number($("kmSave").dataset.id);if(!id||!isAdmin)return;
   const k=kamarRows[id],label=k?`Blok ${k.block} Kamar ${k.no_kamar}`:`kamar #${id}`;
   if(!confirm(`Hapus ${label} secara permanen?\nKamar yang masih berpenghuni tidak bisa dihapus. Tidak bisa dibatalkan.`))return;
@@ -864,11 +877,28 @@ async function renderRiwayatHapus(term){
   if(error){tb.innerHTML=`<tr><td colspan="5" class="empty">Gagal memuat.</td></tr>`;return;}
   if(!data||!data.length){tb.innerHTML=`<tr><td colspan="5" class="empty">${term?"Tidak ada yang cocok.":"Belum ada penghapusan."}</td></tr>`;if(cnt)cnt.textContent=term?"0 hasil":"Riwayat penghapusan";return;}
   if(cnt)cnt.textContent=`${data.length} catatan`;
-  tb.innerHTML=data.map(r=>`<tr><td class="mono" style="font-size:12px;color:var(--muted)">${fmt(r.waktu)}</td>
+  hapusRows={};
+  tb.innerHTML=data.map((r,i)=>{hapusRows[i]=r;
+    return `<tr style="cursor:pointer" onclick="lihatDataHapus(${i})"><td class="mono" style="font-size:12px;color:var(--muted)">${fmt(r.waktu)}</td>
     <td><span class="tag g">${r.jenis||"-"}</span></td>
     <td style="font-weight:600">${r.nama||"-"} <span class="mono" style="color:var(--muted);font-weight:400">${r.ref||""}</span></td>
     <td style="color:var(--muted)">${r.detail||"-"}</td>
-    <td style="color:var(--muted);font-size:12px">${(r.oleh_email||"-").split("@")[0]}</td></tr>`).join("");
+    <td style="color:var(--muted);font-size:12px">${(r.oleh_email||"-").split("@")[0]}</td></tr>`;}).join("");
+}
+let hapusRows={};
+const LBL={nik:"NIK",nama:"Nama",gender:"Gender",department:"Department",jabatan:"Jabatan",gol:"Golongan",fasilitas:"Fasilitas",perusahaan:"Perusahaan",point_of_hire:"Point of Hire",tgl_masuk_kerja:"Masuk kerja",tgl_masuk_mess:"Masuk mess",status:"Status",tgl_resign:"Tgl resign",alasan_resign:"Alasan resign",potongan:"Potongan",no_bed:"No bed",lokasi_hunian:"Lokasi",block:"Blok",no_kamar:"No kamar",floor:"Lantai",jumlah_bed:"Jumlah bed",rusak:"Rusak",catatan:"Catatan"};
+function lihatDataHapus(i){
+  const r=hapusRows[i];if(!r)return;const d=r.data_lengkap;
+  $("dAv").textContent=(r.nama||r.ref||"?").slice(0,2).toUpperCase();
+  $("dNama").textContent=r.nama||r.ref||"-";$("dNik").textContent=`${r.jenis} · dihapus ${fmt(r.waktu)} · oleh ${(r.oleh_email||"-").split("@")[0]}`;
+  let rows="";
+  if(d&&typeof d==="object"){
+    const keys=Object.keys(d).filter(k=>!["id","kamar_id","created_at","updated_at","aset_kembali","pengambilan_bantal","pengambilan_bantal_guling","pengambilan_bedding","resign_oleh"].includes(k));
+    keys.forEach(k=>{let v=d[k];if(typeof v==="boolean")v=v?"Ya":"Tidak";rows+=row(LBL[k]||k,(v===null||v==="")?"-":v);});
+  }else rows=`<div class="empty" style="padding:20px">Data lengkap tidak tersedia (dihapus sebelum fitur ini aktif).</div>`;
+  $("dRows").innerHTML=rows;
+  $("dEditBtn").style.display="none";$("dMoveBtn").style.display="none";
+  $("detailModal").classList.add("show");
 }
 let hpTimer;
 $("cariHapus").addEventListener("input",e=>{clearTimeout(hpTimer);const v=e.target.value.trim();hpTimer=setTimeout(()=>renderRiwayatHapus(v),300);});
@@ -901,19 +931,27 @@ async function loadProfil(){
   const u=curUser||(await sb.auth.getUser()).data.user;if(!u)return;
   const ini=(u.email||"?").slice(0,2).toUpperCase();
   $("pfAv").textContent=ini;$("pfName").textContent=(u.email||"").split("@")[0];$("pfEmail").textContent=u.email||"-";
-  const rl=$("pfRole");rl.textContent=isAdmin?"Administrator":"Pengguna";rl.className="role "+(isAdmin?"admin":"user");
+  const rl=$("pfRole");rl.textContent=isSuper?"Super Admin":isAdmin?"Administrator":"Pengguna";rl.className="role "+(isAdmin?"admin":"user");
   $("pfJoin").textContent=u.created_at?new Date(u.created_at).toLocaleDateString("id-ID",{day:"2-digit",month:"long",year:"numeric"}):"-";
   $("pfLast").textContent=u.last_sign_in_at?fmt(u.last_sign_in_at):"-";
   if(isAdmin){
-    const{data}=await sb.from("admins").select("email,created_at").order("created_at");
+    const{data}=await sb.from("admins").select("email,super,created_at").order("created_at");
     const box=$("adminList"),myEmail=(u.email||"").toLowerCase();
     box.innerHTML=(data||[]).map(a=>{
-      const self=(a.email||"").toLowerCase()===myEmail;
-      const btn=self?`<span class="role user">Anda</span>`:`<button class="actbtn" title="Cabut admin" onclick="cabutAdmin('${(a.email||"").replace(/'/g,"")}')"><i class="bi bi-x-lg"></i></button>`;
-      return `<div class="adminrow"><div class="ad-av">${(a.email||"?").slice(0,2).toUpperCase()}</div><div style="flex:1;min-width:0"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis">${a.email||"(tanpa email)"}</div></div>${btn}</div>`;
+      const self=(a.email||"").toLowerCase()===myEmail, em=(a.email||"").replace(/'/g,"");
+      const badge=a.super?`<span class="role admin" style="margin-right:4px">Super</span>`:"";
+      const cabut=self?`<span class="role user">Anda</span>`:`<button class="actbtn" title="Cabut admin" onclick="cabutAdmin('${em}')"><i class="bi bi-x-lg"></i></button>`;
+      const superBtn=(isSuper&&!(self&&a.super))?`<button class="actbtn" title="${a.super?'Cabut Super Admin':'Jadikan Super Admin'}" onclick="setSuperUser('${em}',${a.super?'false':'true'})" style="${a.super?'color:var(--warn);border-color:var(--warn)':'color:var(--accent);border-color:var(--accent)'}"><i class="bi bi-star${a.super?'-fill':''}"></i></button>`:"";
+      return `<div class="adminrow"><div class="ad-av">${(a.email||"?").slice(0,2).toUpperCase()}</div><div style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${badge}<span style="font-weight:600;overflow:hidden;text-overflow:ellipsis">${a.email||"(tanpa email)"}</span></div>${superBtn}${cabut}</div>`;
     }).join("")||`<div class="empty">Belum ada admin terdaftar.</div>`;
     renderKelolaAset();
   }
+}
+async function setSuperUser(email,val){
+  if(!confirm(val?`Jadikan ${email} sebagai Super Admin? (bisa menghapus data)`:`Cabut status Super Admin dari ${email}?`))return;
+  const{error}=await sb.rpc("set_super",{p_email:email,p_super:val});
+  if(error){const er=$("admErr");er.textContent=error.message||"Gagal mengubah Super Admin.";er.style.display="block";return;}
+  toast(val?"Super Admin ditambahkan ✓":"Status Super Admin dicabut");loadProfil();
 }
 function renderKelolaAset(){
   const box=$("asetKelola");if(!box)return;$("asetErr").style.display="none";
@@ -984,7 +1022,7 @@ async function doPindah(){const kid=$("mvKamar").value;if(!kid||!mvBed)return;co
   const{error}=await sb.rpc("pindah_kamar",{p_nik:moveCtx.nik,p_kamar_id:Number(kid),p_no_bed:mvBed,p_keterangan:null});
   b.disabled=false;b.textContent="Pindahkan";
   if(error){const e=$("mvErr");e.textContent=error.message||"Gagal memindahkan.";e.style.display="block";return;}
-  closeMove();toast("Berhasil dipindahkan ✓");refreshCari();loadStats();}
+  closeMove();toast("Berhasil dipindahkan ✓");refreshCurrent();loadStats();}
 
 /* EDIT */
 async function openEdit(nik){if(!isAdmin)return;const{data,error}=await sb.from("karyawan").select("*").eq("nik",nik).single();if(error||!data){toast("Gagal memuat data");return;}
@@ -1008,7 +1046,7 @@ async function doEdit(){const nik=eNik.value.trim();if(!nik){const e=$("eErr");e
   const{error}=await sb.from("karyawan").update(p).eq("nik",editOldNik);
   b.disabled=false;b.textContent="Simpan perubahan";
   if(error){const e=$("eErr");e.textContent=error.message||"Gagal menyimpan.";e.style.display="block";return;}
-  closeEdit();toast("Data tersimpan ✓");refreshCari();loadStats();}
+  closeEdit();toast("Data tersimpan ✓");refreshCurrent();loadStats();}
 
 /* RESIGN */
 async function loadResign(term){
@@ -1053,6 +1091,7 @@ async function openDetail(nik){
     (isR?row("Tanggal resign", r.tgl_resign)+row("Alasan resign", r.alasan_resign)+row("Di-resign oleh", r.resign_oleh)
         +row("Aset dikembalikan", namaKembali)+row("Aset tidak kembali", tdkKembali)
         +row("Potongan", `<b style="color:var(--full)">${rp(r.potongan)}</b>`):"");
+  $("dEditBtn").style.display=isAdmin?"":"none";$("dMoveBtn").style.display=isAdmin?"":"none";
   $("dEditBtn").onclick=()=>{closeDetail();openEdit(r.nik);};
   $("dMoveBtn").onclick=()=>{closeDetail();openMove(r.nik);};
   $("detailModal").classList.add("show");
