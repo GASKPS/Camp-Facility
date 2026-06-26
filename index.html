@@ -416,6 +416,16 @@ tbody tr:hover{background:var(--canvas);}
               <button class="btn btn-primary" style="flex:1" id="asetSaveBtn" onclick="simpanAset()"><i class="bi bi-save"></i> Simpan</button>
             </div>
           </div>
+          <div class="pcard sadm">
+            <h3>Kelola alat kebersihan</h3>
+            <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px">Daftar alat kebersihan yang dicek per kamar. Hanya Super Admin.</p>
+            <div class="alert" id="alatErr"></div>
+            <div id="alatKelola"></div>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button class="btn btn-ghost" style="flex:1" onclick="tambahBarisAlat()"><i class="bi bi-plus-lg"></i> Tambah alat</button>
+              <button class="btn btn-primary" style="flex:1" id="alatSaveBtn" onclick="simpanAlat()"><i class="bi bi-save"></i> Simpan</button>
+            </div>
+          </div>
           <div class="pcard adm">
             <h3>Pemeriksaan data</h3>
             <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px">Cek kamar melebihi kapasitas, gender tak cocok, fasilitas janggal, atau karyawan tanpa kamar.</p>
@@ -612,6 +622,18 @@ tbody tr:hover{background:var(--canvas);}
   </div>
 </div></div>
 
+<!-- MODAL KEBERSIHAN KAMAR -->
+<div class="mback" id="kbModal"><div class="mbox">
+  <h4><i class="bi bi-bucket"></i> Alat kebersihan kamar</h4>
+  <div class="sub" id="kbInfo"></div>
+  <div id="kbList"></div>
+  <div class="alert" id="kbErr"></div>
+  <div style="display:flex;gap:10px;margin-top:16px">
+    <button class="btn btn-ghost" style="flex:1" onclick="closeKebersihan()">Tutup</button>
+    <button class="btn btn-primary sadm" style="flex:1" id="kbSave" onclick="doSimpanKebersihan()">Simpan</button>
+  </div>
+</div></div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -622,6 +644,11 @@ const sb=supabase.createClient(
 );
 let isAdmin=false,isSuper=false,lastResults={},moveCtx=null,mvBed=null,editOldNik=null,curUser=null,kamarRows={};
 let asetList=[],asetMap={};
+let alatList=[];
+async function loadAlat(){
+  const{data}=await sb.from("alat_kebersihan").select("*").order("urutan").order("id");
+  alatList=data||[];
+}
 function rp(n){return "Rp "+(Number(n)||0).toLocaleString("id-ID");}
 async function loadAset(){
   const{data}=await sb.from("aset").select("*").order("urutan").order("id");
@@ -683,7 +710,7 @@ async function doLogout(){await sb.auth.signOut();isAdmin=false;document.body.cl
 function showLogin(){$("login").style.display="flex";$("app").style.display="none";}
 async function showApp(){
   $("login").style.display="none";$("app").style.display="block";
-  await checkAdmin();initFilters();loadAset();goto(localStorage.getItem("sec")||"beranda");
+  await checkAdmin();initFilters();loadAset();loadAlat();goto(localStorage.getItem("sec")||"beranda");
 }
 async function checkSession(){const{data}=await sb.auth.getSession();data.session?showApp():showLogin();}
 async function checkAdmin(){
@@ -827,8 +854,14 @@ async function loadKamar(){
     const rusakBadge=k.rusak?`<span class="pill" style="background:var(--full-bg);color:var(--full)">⚠ RUSAK</span>`:"";
     const editBtn=isAdmin?`<button class="actbtn" title="Edit kamar" onclick="openEditKamar(${k.id})"><i class="bi bi-pencil"></i></button>`:"";
     const catatan=k.catatan?`<div class="rm" style="color:var(--full)"><i class="bi bi-exclamation-triangle"></i> ${k.catatan}</div>`:"";
-    return `<div class="room"><div class="rh"><span class="rt">Blok <span class="mono">${k.block}</span> · Kamar <span class="mono">${k.no_kamar}</span></span><span style="display:flex;align-items:center;gap:6px">${rusakBadge}<span class="pill p-${k.status_kamar}">${k.status_kamar}</span>${editBtn}</span></div>
-    <div class="rm">${k.gender==="L"?"Laki-laki":k.gender==="P"?"Perempuan":"-"} · ${k.fasilitas||"-"}${k.golongan?` · Gol ${k.golongan}`:""} · <span class="mono">${k.terisi}/${k.jumlah_bed}</span> terisi</div>${catatan}<div class="beds">${beds}</div></div>`;}).join("");
+    const kb=k.kebersihan&&typeof k.kebersihan==="object"?k.kebersihan:{};
+    const kbItems=kb.items||kb;
+    const kbAmbil=Object.values(kbItems).filter(x=>x&&typeof x==="object"&&x.ambil).length, kbTotal=alatList.length;
+    const kbColor=kbTotal&&kbAmbil>=kbTotal?"var(--ok)":kbAmbil>0?"var(--warn)":"var(--muted)";
+    const broomBtn=`<button class="actbtn" title="Alat kebersihan" onclick="openKebersihan(${k.id})"><i class="bi bi-bucket"></i></button>`;
+    return `<div class="room"><div class="rh"><span class="rt">Blok <span class="mono">${k.block}</span> · Kamar <span class="mono">${k.no_kamar}</span></span><span style="display:flex;align-items:center;gap:6px">${rusakBadge}<span class="pill p-${k.status_kamar}">${k.status_kamar}</span>${broomBtn}${editBtn}</span></div>
+    <div class="rm">${k.gender==="L"?"Laki-laki":k.gender==="P"?"Perempuan":"-"} · ${k.fasilitas||"-"}${k.golongan?` · Gol ${k.golongan}`:""} · <span class="mono">${k.terisi}/${k.jumlah_bed}</span> terisi</div>
+    <div class="rm" style="color:${kbColor}"><i class="bi bi-bucket"></i> Kebersihan: <span class="mono">${kbAmbil}/${kbTotal}</span> diambil</div>${catatan}<div class="beds">${beds}</div></div>`;}).join("");
   if(!rooms.length)area.innerHTML=`<div class="empty">Tidak ada kamar untuk pilihan ini.</div>`;
 }
 
@@ -865,8 +898,37 @@ async function doTambahKamar(){const b=$("nkSave"),er=$("nkErr");er.style.displa
   if($("kLokasi").value===lok)loadKamar();
   loadStats();}
 
-/* HAPUS */
-async function hapusKaryawan(){const nik=editOldNik;if(!nik||!isAdmin)return;
+/* KEBERSIHAN KAMAR */
+function openKebersihan(id){const k=kamarRows[id];if(!k)return;
+  $("kbSave").dataset.id=id;
+  $("kbInfo").innerHTML=`Blok <b>${k.block}</b> · Kamar <b>${k.no_kamar}</b>${isSuper?" · centang yang sudah diambil, isi pengambilnya":" · hanya Super Admin yang bisa mengubah"}`;
+  const kb=k.kebersihan&&typeof k.kebersihan==="object"?k.kebersihan:{};
+  const items=kb.items||kb;
+  const dis=isSuper?"":"disabled";
+  if(!alatList.length){$("kbList").innerHTML='<div class="empty">Belum ada daftar alat. Atur di Profil (Super Admin).</div>';}
+  else{$("kbList").innerHTML=alatList.map(a=>{const cur=items[a.id]||{};const on=!!cur.ambil;
+    return `<div class="kbrow" data-id="${a.id}" style="padding:9px 0;border-bottom:1px solid var(--line)">
+      <label style="display:flex;align-items:center;gap:9px;font-size:13px;font-weight:600"><input type="checkbox" class="kb-amb" ${on?"checked":""} ${dis} onchange="kbToggle(this)"> ${a.nama}</label>
+      <div class="kb-detail" style="display:${on?"flex":"none"};flex-wrap:wrap;gap:6px;margin-top:7px;padding-left:24px">
+        <input type="date" class="inp kb-tgl" value="${cur.tgl||""}" ${dis} style="width:140px">
+        <input class="inp kb-nama" value="${(cur.nama||"").replace(/"/g,"&quot;")}" ${dis} placeholder="nama pengambil" style="flex:1;min-width:120px">
+        <input class="inp kb-nik mono" value="${(cur.nik||"").replace(/"/g,"&quot;")}" ${dis} placeholder="NIK" style="width:120px">
+      </div>
+    </div>`;}).join("");}
+  $("kbErr").style.display="none";$("kbModal").classList.add("show");}
+function kbToggle(cb){const row=cb.closest(".kbrow"),det=row.querySelector(".kb-detail"),tgl=row.querySelector(".kb-tgl");
+  if(cb.checked){det.style.display="flex";if(!tgl.value)tgl.value=new Date().toISOString().slice(0,10);}else{det.style.display="none";}}
+function closeKebersihan(){$("kbModal").classList.remove("show");}
+async function doSimpanKebersihan(){if(!isSuper)return;const id=Number($("kbSave").dataset.id),b=$("kbSave"),er=$("kbErr");er.style.display="none";
+  const items={};document.querySelectorAll("#kbList .kbrow").forEach(r=>{const aid=r.dataset.id,amb=r.querySelector(".kb-amb").checked;
+    items[aid]=amb?{ambil:true,tgl:r.querySelector(".kb-tgl").value||null,nama:r.querySelector(".kb-nama").value.trim()||null,nik:r.querySelector(".kb-nik").value.trim()||null}:{ambil:false};});
+  b.disabled=true;b.innerHTML='<span class="spin"></span>';
+  const{error}=await sb.rpc("simpan_kebersihan",{p_id:id,p_data:{items}});
+  b.disabled=false;b.textContent="Simpan";
+  if(error){er.textContent=error.message||"Gagal menyimpan.";er.style.display="block";return;}
+  closeKebersihan();toast("Kebersihan tersimpan ✓");loadKamar();}
+
+/* HAPUS */async function hapusKaryawan(){const nik=editOldNik;if(!nik||!isAdmin)return;
   const nama=eNama.value||nik;
   if(!confirm(`Hapus karyawan "${nama}" (NIK ${nik}) secara permanen?\nData & riwayat pindahnya ikut terhapus. Tidak bisa dibatalkan.`))return;
   const{error}=await sb.rpc("hapus_karyawan",{p_nik:nik});
@@ -960,9 +1022,27 @@ async function loadProfil(){
       const superBtn=(isSuper&&!(self&&a.super))?`<button class="actbtn" title="${a.super?'Cabut Super Admin':'Jadikan Super Admin'}" onclick="setSuperUser('${em}',${a.super?'false':'true'})" style="${a.super?'color:var(--warn);border-color:var(--warn)':'color:var(--accent);border-color:var(--accent)'}"><i class="bi bi-star${a.super?'-fill':''}"></i></button>`:"";
       return `<div class="adminrow"><div class="ad-av">${(a.email||"?").slice(0,2).toUpperCase()}</div><div style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${badge}<span style="font-weight:600;overflow:hidden;text-overflow:ellipsis">${a.email||"(tanpa email)"}</span></div>${superBtn}${cabut}</div>`;
     }).join("")||`<div class="empty">Belum ada admin terdaftar.</div>`;
-    renderKelolaAset();
+    renderKelolaAset();if(isSuper)renderKelolaAlat();
   }
 }
+function renderKelolaAlat(){const box=$("alatKelola");if(!box)return;$("alatErr").style.display="none";
+  box.innerHTML=alatList.map(a=>barisAlatHTML(a.id,a.nama)).join("");}
+function barisAlatHTML(id,nama){return `<div class="alatrow" data-id="${id||""}" style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+  <input class="inp alat-nama" value="${(nama||"").replace(/"/g,"&quot;")}" placeholder="Nama alat" style="flex:1">
+  <button class="actbtn" title="Hapus" onclick="hapusBarisAlat(this)"><i class="bi bi-trash"></i></button></div>`;}
+function tambahBarisAlat(){$("alatKelola").insertAdjacentHTML("beforeend",barisAlatHTML("",""));}
+async function hapusBarisAlat(btn){const row=btn.closest(".alatrow"),id=row.dataset.id;
+  if(id){if(!confirm("Hapus alat ini dari daftar?"))return;const{error}=await sb.from("alat_kebersihan").delete().eq("id",Number(id));if(error){const e=$("alatErr");e.textContent=error.message||"Gagal menghapus.";e.style.display="block";return;}}
+  row.remove();}
+async function simpanAlat(){const b=$("alatSaveBtn"),er=$("alatErr");er.style.display="none";b.disabled=true;b.innerHTML='<span class="spin"></span>';
+  try{const rows=[...document.querySelectorAll("#alatKelola .alatrow")];
+    for(let i=0;i<rows.length;i++){const el=rows[i],id=el.dataset.id,nama=el.querySelector(".alat-nama").value.trim();if(!nama)continue;
+      if(id){await sb.from("alat_kebersihan").update({nama,urutan:i+1}).eq("id",Number(id));}
+      else{await sb.from("alat_kebersihan").insert({nama,urutan:i+1});}}
+    await loadAlat();renderKelolaAlat();toast("Daftar alat tersimpan ✓");
+  }catch(e){er.textContent="Gagal menyimpan alat.";er.style.display="block";}
+  b.disabled=false;b.innerHTML='<i class="bi bi-save"></i> Simpan';}
+
 async function setSuperUser(email,val){
   if(!confirm(val?`Jadikan ${email} sebagai Super Admin? (bisa menghapus data)`:`Cabut status Super Admin dari ${email}?`))return;
   const{error}=await sb.rpc("set_super",{p_email:email,p_super:val});
