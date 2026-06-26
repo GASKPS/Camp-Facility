@@ -794,25 +794,71 @@ function renderCari(data){
   }).join("");
   cnt.textContent=`${data.length} hasil`;
 }
-let st;
+let st, karCache=null;
+function normTxt(s){return (s||"").toString().toLowerCase().replace(/[^a-z0-9]+/g," ").trim();}
+function lev(a,b){ // jarak edit (Levenshtein) dengan batas
+  const m=a.length,n=b.length;if(Math.abs(m-n)>2)return 9;
+  let prev=Array.from({length:n+1},(_,i)=>i),cur=new Array(n+1);
+  for(let i=1;i<=m;i++){cur[0]=i;for(let j=1;j<=n;j++){const c=a[i-1]===b[j-1]?0:1;cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+c);}[prev,cur]=[cur,prev];}
+  return prev[n];
+}
+async function loadKarCache(){
+  if(karCache)return;
+  let all=[],from=0,size=1000;
+  while(true){
+    const{data,error}=await sb.from("karyawan")
+      .select("nik,nama,gender,department,jabatan,perusahaan,no_bed,kamar_id,kamar:kamar_id(id,lokasi_hunian,block,no_kamar)")
+      .neq("status","resign").order("nama").range(from,from+size-1);
+    if(error)throw error;
+    all=all.concat(data||[]);
+    if(!data||data.length<size)break;
+    from+=size;
+  }
+  for(const r of all){
+    const parts=[r.nama,r.nik,r.department,r.jabatan,r.perusahaan,r.kamar?.block,r.kamar?.no_kamar,r.kamar?.lokasi_hunian];
+    r._s=normTxt(parts.join(" "));r._w=r._s.split(" ").filter(Boolean);
+  }
+  karCache=all;
+}
+function matchScore(r,tokens){
+  let score=0;
+  for(const t of tokens){
+    let best=0;
+    if(r._s.includes(t))best=3;
+    else{const md=t.length>=7?2:t.length>=4?1:0;
+      if(md>0)for(const w of r._w){if(Math.abs(w.length-t.length)>md)continue;if(lev(t,w)<=md){best=1;break;}}}
+    if(best===0)return -1;
+    score+=best;
+  }
+  if(r._w[0]&&r._w[0].startsWith(tokens[0]))score+=2; // bonus: nama diawali kata pertama
+  return score;
+}
 async function runSearch(){
   const v=$("cariNik").value.trim(),per=$("fPerusahaan").value,gen=$("fGender").value,sort=$("fSort").value,hun=$("fHunian").value;
   const hasFilter=per||gen||hun;
   if(v.length<2 && !hasFilter){$("hasilCari").innerHTML=`<tr><td colspan="9" class="empty"><i class="bi bi-search"></i>Ketik nama/NIK atau pilih filter untuk menampilkan.</td></tr>`;$("count-cari").textContent="Hasil pencarian";return;}
   $("count-cari").innerHTML='<span class="spin"></span>';
-  let q=sb.from("karyawan").select("nik,nama,gender,department,jabatan,no_bed,kamar:kamar_id(id,lokasi_hunian,block,no_kamar)").neq("status","resign");
-  if(v.length>=2){const safe=v.replace(/[,()%*]/g," ").trim();q=q.or(`nik.ilike.%${safe}%,nama.ilike.%${safe}%`);}
-  if(per)q=q.eq("perusahaan",per);
-  if(gen)q=q.eq("gender",gen);
-  if(hun==="tanpa")q=q.is("kamar_id",null);
-  else if(hun==="ada")q=q.not("kamar_id","is",null);
-  const{data,error}=await q.order(sort==="nik"?"nik":"nama",{ascending:true}).limit(50);
-  if(error){$("hasilCari").innerHTML=`<tr><td colspan="9" class="empty">Gagal memuat. Periksa koneksi lalu coba lagi.</td></tr>`;return;}
-  renderCari(data);
+  try{await loadKarCache();}catch(e){$("hasilCari").innerHTML=`<tr><td colspan="9" class="empty">Gagal memuat. Periksa koneksi lalu coba lagi.</td></tr>`;return;}
+  let rows=karCache;
+  if(per)rows=rows.filter(r=>r.perusahaan===per);
+  if(gen)rows=rows.filter(r=>r.gender===gen);
+  if(hun==="tanpa")rows=rows.filter(r=>!r.kamar_id);
+  else if(hun==="ada")rows=rows.filter(r=>r.kamar_id);
+  if(v.length>=2){
+    const tokens=normTxt(v).split(" ").filter(Boolean);
+    rows=rows.map(r=>({r,sc:matchScore(r,tokens)})).filter(x=>x.sc>=0)
+         .sort((a,b)=>b.sc-a.sc||(a.r.nama||"").localeCompare(b.r.nama||"")).map(x=>x.r);
+  }else{
+    rows=rows.slice().sort((a,b)=>sort==="nik"?(a.nik||"").localeCompare(b.nik||""):(a.nama||"").localeCompare(b.nama||""));
+  }
+  const total=rows.length;
+  renderCari(rows.slice(0,100));
+  if(total>100)$("count-cari").textContent=`100 dari ${total} hasil (persempit pencarian)`;
 }
-$("cariNik").addEventListener("input",()=>{clearTimeout(st);st=setTimeout(runSearch,300);});
+$("cariNik").addEventListener("input",()=>{clearTimeout(st);st=setTimeout(runSearch,250);});
 function refreshCari(){const v=$("cariNik").value.trim();if(v.length>=2||$("fPerusahaan").value||$("fGender").value||$("fHunian").value)runSearch();}
 function refreshCurrent(){
+  karCache=null; // data mungkin berubah → muat ulang daftar cari
   const act=document.querySelector(".panel.active"),id=act?act.id:"";
   if(id==="sec-beranda")loadStats();
   else if(id==="sec-karyawan")refreshCari();
