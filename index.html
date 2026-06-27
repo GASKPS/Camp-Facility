@@ -568,6 +568,7 @@ tbody tr:hover{background:var(--canvas);}
     <div style="min-width:0"><div style="font-size:1.05rem;font-weight:800" id="dNama">–</div><div class="mono" style="font-size:12px;color:var(--muted)" id="dNik">–</div></div>
   </div>
   <div id="dRows" class="pf-rows" style="margin-top:8px"></div>
+  <div id="dKedatangan"></div>
   <div style="display:flex;gap:10px;margin-top:16px">
     <button class="btn btn-ghost" style="flex:1" onclick="closeDetail()">Tutup</button>
     <button class="btn btn-ghost adm" style="flex:1" id="dEditBtn"><i class="bi bi-pencil"></i> Edit</button>
@@ -869,6 +870,8 @@ function refreshCurrent(){
 }
 
 /* KAMAR */
+const BEDDING=[["selimut","Selimut"],["bantal_kepala","Bantal kepala"],["bantal_guling","Bantal guling"],["sarung_bantal","Sarung bantal"],["seprai","Seprai"]];
+function isResmiMasuk(p){if(!p||!p.tgl_masuk_mess)return false;const pl=p.perlengkapan&&typeof p.perlengkapan==="object"?p.perlengkapan:{};return BEDDING.every(([k])=>pl[k]===true);}
 let kamarReady=false;
 async function initKamarTab(){if(kamarReady)return;kamarReady=true;
   const{data}=await sb.from("kamar").select("lokasi_hunian");
@@ -888,12 +891,14 @@ async function loadKamar(){
   else if(stt==="penuh")rooms=data.filter(k=>k.status_kamar==="FULL");
   else if(stt==="kosong")rooms=data.filter(k=>k.status_kamar==="KOSONG");
   rooms.sort((a,b)=>(parseInt(a.block)-parseInt(b.block))||(parseInt(a.no_kamar)-parseInt(b.no_kamar)));cnt.textContent=`${rooms.length} kamar`;
-  const{data:occ}=await sb.from("karyawan").select("nik,nama,no_bed,kamar_id").eq("status","aktif").in("kamar_id",rooms.map(d=>d.id));
+  const{data:occ}=await sb.from("karyawan").select("nik,nama,no_bed,kamar_id,tgl_masuk_mess,perlengkapan").eq("status","aktif").in("kamar_id",rooms.map(d=>d.id));
   const byRoom={};(occ||[]).forEach(o=>{(byRoom[o.kamar_id]=byRoom[o.kamar_id]||[]).push(o);});
   kamarRows={};rooms.forEach(k=>kamarRows[k.id]=k);
   area.innerHTML=rooms.map(k=>{const ppl=(byRoom[k.id]||[]).reduce((m,p)=>{m[p.no_bed]=p;return m;},{});let beds="";
     for(let i=1;i<=k.jumlah_bed;i++){
-      if(ppl[i]){beds+=`<div class="bedc occ" style="cursor:pointer" onclick="openDetail('${ppl[i].nik}')"><span class="bn">${i}</span><span class="nm">${ppl[i].nama}</span></div>`;}
+      if(ppl[i]){const resmi=isResmiMasuk(ppl[i]);
+        const bstyle=resmi?"":"background:var(--full-bg);color:var(--full)";
+        beds+=`<div class="bedc occ" style="cursor:pointer;${bstyle}" title="${resmi?'Sudah resmi masuk':'Belum resmi masuk'}" onclick="openDetail('${ppl[i].nik}')"><span class="bn">${i}</span><span class="nm">${ppl[i].nama}</span></div>`;}
       else{const clk=isAdmin?`onclick="openAssign(${k.id},'${k.gender}',${i},'Blok ${k.block} Kamar ${k.no_kamar}')" style="cursor:pointer"`:"";
            beds+=`<div class="bedc free" ${clk}><span class="bn">${i}</span><span class="nm">${isAdmin?"+ isi":"kosong"}</span></div>`;}
     }
@@ -1265,7 +1270,43 @@ async function openDetail(nik){
   $("dEditBtn").style.display=isAdmin?"":"none";$("dMoveBtn").style.display=isAdmin?"":"none";
   $("dEditBtn").onclick=()=>{closeDetail();openEdit(r.nik);};
   $("dMoveBtn").onclick=()=>{closeDetail();openMove(r.nik);};
+  // Kedatangan & perlengkapan tidur (hanya untuk yang aktif)
+  const kdBox=$("dKedatangan");
+  if(isR){kdBox.innerHTML="";}
+  else{
+    const pl=r.perlengkapan&&typeof r.perlengkapan==="object"?r.perlengkapan:{};
+    const resmi=isResmiMasuk(r);
+    const badge=resmi
+      ?`<span style="font-size:12px;font-weight:700;color:var(--ok)"><i class="bi bi-check-circle-fill"></i> Resmi masuk</span>`
+      :`<span style="font-size:12px;font-weight:700;color:var(--full)"><i class="bi bi-circle"></i> Belum resmi masuk</span>`;
+    if(isAdmin){
+      kdBox.innerHTML=`<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px"><span style="font-weight:700"><i class="bi bi-box-arrow-in-right"></i> Kedatangan</span>${badge}</div>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Tanggal masuk mess (on-site)</label>
+        <input type="date" id="kdTgl" class="inp" value="${r.tgl_masuk_mess||""}" style="margin-bottom:10px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Perlengkapan tidur diambil:</div>
+        ${BEDDING.map(([k,nm])=>`<label style="display:flex;align-items:center;gap:9px;font-size:13px;padding:5px 0"><input type="checkbox" class="kd-it" data-k="${k}" ${pl[k]?"checked":""}> ${nm}</label>`).join("")}
+        <div class="alert" id="kdErr"></div>
+        <button class="btn btn-primary" id="kdSave" style="width:100%;margin-top:8px" onclick="simpanKedatangan('${r.nik}')"><i class="bi bi-save"></i> Simpan kedatangan</button>
+      </div>`;
+    }else{
+      const diambil=BEDDING.filter(([k])=>pl[k]).map(([,nm])=>nm).join(", ")||"—";
+      kdBox.innerHTML=`<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-weight:700"><i class="bi bi-box-arrow-in-right"></i> Kedatangan</span>${badge}</div>
+        ${row("Perlengkapan diambil", diambil)}</div>`;
+    }
+  }
   $("detailModal").classList.add("show");
+}
+async function simpanKedatangan(nik){if(!isAdmin)return;const b=$("kdSave"),er=$("kdErr");er.style.display="none";
+  const tgl=$("kdTgl").value||null;const pl={};document.querySelectorAll("#dKedatangan .kd-it").forEach(c=>{pl[c.dataset.k]=c.checked;});
+  b.disabled=true;b.innerHTML='<span class="spin"></span>';
+  const{error}=await sb.rpc("simpan_kedatangan",{p_nik:nik,p_tgl:tgl,p_perlengkapan:pl});
+  b.disabled=false;b.innerHTML='<i class="bi bi-save"></i> Simpan kedatangan';
+  if(error){er.textContent=error.message||"Gagal menyimpan.";er.style.display="block";return;}
+  toast("Kedatangan tersimpan ✓");karCache=null;
+  openDetail(nik); // muat ulang tampilan detail
+  const act=document.querySelector(".panel.active");if(act&&act.id==="sec-kamar")loadKamar();
 }
 function closeDetail(){$("detailModal").classList.remove("show");}
 
