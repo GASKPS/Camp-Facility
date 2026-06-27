@@ -1285,7 +1285,10 @@ async function openDetail(nik){
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Tanggal masuk mess (on-site)</label>
         <input type="date" id="kdTgl" class="inp" value="${r.tgl_masuk_mess||""}" style="margin-bottom:10px">
         <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Perlengkapan tidur diambil:</div>
-        ${BEDDING.map(([k,nm])=>`<label style="display:flex;align-items:center;gap:9px;font-size:13px;padding:5px 0"><input type="checkbox" class="kd-it" data-k="${k}" ${pl[k]?"checked":""}> ${nm}</label>`).join("")}
+        <div style="border:1px solid var(--line);border-radius:12px;padding:6px 12px;background:var(--card2,transparent)">
+          <label style="display:flex;align-items:center;gap:9px;font-size:13px;font-weight:700;padding:7px 0;border-bottom:1px solid var(--line)"><input type="checkbox" id="kdAll" onchange="kdToggleAll(this)"> Ambil semua</label>
+          ${BEDDING.map(([k,nm])=>`<label style="display:flex;align-items:center;gap:9px;font-size:13px;padding:6px 0"><input type="checkbox" class="kd-it" data-k="${k}" ${pl[k]?"checked":""} onchange="kdSyncAll()"> ${nm}</label>`).join("")}
+        </div>
         <div class="alert" id="kdErr"></div>
         <button class="btn btn-primary" id="kdSave" style="width:100%;margin-top:8px" onclick="simpanKedatangan('${r.nik}')"><i class="bi bi-save"></i> Simpan kedatangan</button>
       </div>`;
@@ -1296,10 +1299,12 @@ async function openDetail(nik){
         ${row("Perlengkapan diambil", diambil)}</div>`;
     }
   }
+  if(isAdmin&&!isR&&$("kdAll"))kdSyncAll();
   $("detailModal").classList.add("show");
 }
-async function simpanKedatangan(nik){if(!isAdmin)return;const b=$("kdSave"),er=$("kdErr");er.style.display="none";
-  const tgl=$("kdTgl").value||null;const pl={};document.querySelectorAll("#dKedatangan .kd-it").forEach(c=>{pl[c.dataset.k]=c.checked;});
+function kdToggleAll(master){document.querySelectorAll("#dKedatangan .kd-it").forEach(c=>{c.checked=master.checked;});}
+function kdSyncAll(){const a=$("kdAll");if(!a)return;const items=[...document.querySelectorAll("#dKedatangan .kd-it")];a.checked=items.length>0&&items.every(c=>c.checked);}
+async function simpanKedatangan(nik){if(!isAdmin)return;const b=$("kdSave"),er=$("kdErr");er.style.display="none";  const tgl=$("kdTgl").value||null;const pl={};document.querySelectorAll("#dKedatangan .kd-it").forEach(c=>{pl[c.dataset.k]=c.checked;});
   b.disabled=true;b.innerHTML='<span class="spin"></span>';
   const{error}=await sb.rpc("simpan_kedatangan",{p_nik:nik,p_tgl:tgl,p_perlengkapan:pl});
   b.disabled=false;b.innerHTML='<i class="bi bi-save"></i> Simpan kedatangan';
