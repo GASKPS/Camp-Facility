@@ -498,6 +498,13 @@ tbody tr:hover{background:var(--canvas);}
     <div class="fld"><label>Masuk mess</label><input id="eTmm" type="date" class="inp"></div>
     <div class="fld"><label>Status</label><select id="eStatus" class="sel" onchange="toggleResign()"><option value="aktif">aktif</option><option value="resign">resign</option></select></div>
   </div>
+  <div id="kdBlock" class="fld">
+    <label>Perlengkapan tidur <span style="color:var(--muted);font-weight:400">(centang yang sudah diambil)</span></label>
+    <div class="kdbox" style="border:1px solid var(--line);border-radius:12px;padding:6px 12px;margin-top:4px">
+      <label style="display:flex;align-items:center;gap:9px;font-size:13px;font-weight:700;padding:7px 0;border-bottom:1px solid var(--line)"><input type="checkbox" class="kd-all" onchange="kdToggleAll(this)"> Ambil semua</label>
+      <div id="eKdItems"></div>
+    </div>
+  </div>
   <div id="resignBlock" style="display:none">
     <div class="grid2">
       <div class="fld"><label>Tanggal resign</label><input id="eTglResign" type="date" class="inp"></div>
@@ -1177,11 +1184,16 @@ async function openEdit(nik){if(!isAdmin)return;const{data,error}=await sb.from(
   eNik.value=data.nik||"";eNama.value=data.nama||"";eGender.value=data.gender||"";eGol.value=data.gol||"";eFasilitas.value=data.fasilitas||"";
   eDept.value=data.department||"";eJab.value=data.jabatan||"";ePerusahaan.value=data.perusahaan||"";ePoh.value=data.point_of_hire||"";
   eTmk.value=data.tgl_masuk_kerja||"";eTmm.value=data.tgl_masuk_mess||"";eStatus.value=data.status||"aktif";
-  $("eTglResign").value=data.tgl_resign||"";$("eAlasan").value=data.alasan_resign||"";toggleResign();
+  $("eTglResign").value=data.tgl_resign||"";$("eAlasan").value=data.alasan_resign||"";
+  // perlengkapan tidur
+  const pl=data.perlengkapan&&typeof data.perlengkapan==="object"?data.perlengkapan:{};
+  $("eKdItems").innerHTML=BEDDING.map(([k,nm])=>`<label style="display:flex;align-items:center;gap:9px;font-size:13px;padding:6px 0"><input type="checkbox" class="kd-it" data-k="${k}" ${pl[k]?"checked":""} onchange="kdSync(this)"> ${nm}</label>`).join("");
+  const allOn=BEDDING.every(([k])=>pl[k]===true);document.querySelector("#kdBlock .kd-all").checked=allOn;
+  toggleResign();
   renderAsetChecklist(Array.isArray(data.aset_kembali)?data.aset_kembali:null);
   $("eErr").style.display="none";$("editModal").classList.add("show");}
 function closeEdit(){$("editModal").classList.remove("show");}
-function toggleResign(){const on=$("eStatus").value==="resign";$("resignBlock").style.display=on?"":"none";if(on&&!$("eTglResign").value)$("eTglResign").value=new Date().toISOString().slice(0,10);}
+function toggleResign(){const on=$("eStatus").value==="resign";$("resignBlock").style.display=on?"":"none";$("kdBlock").style.display=on?"none":"";if(on&&!$("eTglResign").value)$("eTglResign").value=new Date().toISOString().slice(0,10);}
 async function doEdit(){const nik=eNik.value.trim();if(!nik){const e=$("eErr");e.textContent="NIK tidak boleh kosong.";e.style.display="block";return;}
   const b=$("eSave");b.disabled=true;b.innerHTML='<span class="spin"></span>';$("eErr").style.display="none";
   const resign=$("eStatus").value==="resign";
@@ -1189,7 +1201,8 @@ async function doEdit(){const nik=eNik.value.trim();if(!nik){const e=$("eErr");e
   if(resign){const boxes=[...document.querySelectorAll("#asetReturn input[type=checkbox]")];
     aset_kembali=boxes.filter(b=>b.checked).map(b=>Number(b.dataset.id));
     potongan=boxes.filter(b=>!b.checked).reduce((s,b)=>s+Number(b.dataset.harga||0),0);}
-  const p={nik,nama:eNama.value.trim(),gender:eGender.value||null,gol:eGol.value.trim()||null,fasilitas:eFasilitas.value||null,department:eDept.value.trim()||null,jabatan:eJab.value.trim()||null,perusahaan:ePerusahaan.value.trim()||null,point_of_hire:ePoh.value.trim()||null,tgl_masuk_kerja:eTmk.value||null,tgl_masuk_mess:eTmm.value||null,status:eStatus.value,tgl_resign:resign?($("eTglResign").value||null):null,alasan_resign:resign?($("eAlasan").value.trim()||null):null,resign_oleh:resign?(curUser?.email||null):null,aset_kembali:aset_kembali,potongan:potongan};
+  const perlengkapan={};document.querySelectorAll("#eKdItems .kd-it").forEach(c=>{perlengkapan[c.dataset.k]=c.checked;});
+  const p={nik,nama:eNama.value.trim(),gender:eGender.value||null,gol:eGol.value.trim()||null,fasilitas:eFasilitas.value||null,department:eDept.value.trim()||null,jabatan:eJab.value.trim()||null,perusahaan:ePerusahaan.value.trim()||null,point_of_hire:ePoh.value.trim()||null,tgl_masuk_kerja:eTmk.value||null,tgl_masuk_mess:eTmm.value||null,perlengkapan:perlengkapan,status:eStatus.value,tgl_resign:resign?($("eTglResign").value||null):null,alasan_resign:resign?($("eAlasan").value.trim()||null):null,resign_oleh:resign?(curUser?.email||null):null,aset_kembali:aset_kembali,potongan:potongan};
   const{error}=await sb.from("karyawan").update(p).eq("nik",editOldNik);
   b.disabled=false;b.textContent="Simpan perubahan";
   if(error){const e=$("eErr");e.textContent=error.message||"Gagal menyimpan.";e.style.display="block";return;}
@@ -1272,47 +1285,26 @@ async function openDetail(nik){
   $("dMoveBtn").onclick=()=>{closeDetail();openMove(r.nik);};
   // Kedatangan & perlengkapan tidur (hanya untuk yang aktif)
   const kdBox=$("dKedatangan");
-  if(isR){kdBox.innerHTML="";}
-  else{
-    const pl=r.perlengkapan&&typeof r.perlengkapan==="object"?r.perlengkapan:{};
-    const resmi=isResmiMasuk(r);
-    const badge=resmi
-      ?`<span style="font-size:12px;font-weight:700;color:var(--ok)"><i class="bi bi-check-circle-fill"></i> Resmi masuk</span>`
-      :`<span style="font-size:12px;font-weight:700;color:var(--full)"><i class="bi bi-circle"></i> Belum resmi masuk</span>`;
-    if(isAdmin){
-      kdBox.innerHTML=`<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px"><span style="font-weight:700"><i class="bi bi-box-arrow-in-right"></i> Kedatangan</span>${badge}</div>
-        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Tanggal masuk mess (on-site)</label>
-        <input type="date" id="kdTgl" class="inp" value="${r.tgl_masuk_mess||""}" style="margin-bottom:10px">
-        <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Perlengkapan tidur diambil:</div>
-        <div style="border:1px solid var(--line);border-radius:12px;padding:6px 12px;background:var(--card2,transparent)">
-          <label style="display:flex;align-items:center;gap:9px;font-size:13px;font-weight:700;padding:7px 0;border-bottom:1px solid var(--line)"><input type="checkbox" id="kdAll" onchange="kdToggleAll(this)"> Ambil semua</label>
-          ${BEDDING.map(([k,nm])=>`<label style="display:flex;align-items:center;gap:9px;font-size:13px;padding:6px 0"><input type="checkbox" class="kd-it" data-k="${k}" ${pl[k]?"checked":""} onchange="kdSyncAll()"> ${nm}</label>`).join("")}
-        </div>
-        <div class="alert" id="kdErr"></div>
-        <button class="btn btn-primary" id="kdSave" style="width:100%;margin-top:8px" onclick="simpanKedatangan('${r.nik}')"><i class="bi bi-save"></i> Simpan kedatangan</button>
-      </div>`;
-    }else{
-      const diambil=BEDDING.filter(([k])=>pl[k]).map(([,nm])=>nm).join(", ")||"—";
-      kdBox.innerHTML=`<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-weight:700"><i class="bi bi-box-arrow-in-right"></i> Kedatangan</span>${badge}</div>
-        ${row("Perlengkapan diambil", diambil)}</div>`;
-    }
-  }
-  if(isAdmin&&!isR&&$("kdAll"))kdSyncAll();
+  if(isR){kdBox.innerHTML="";kdData=null;}
+  else{kdData=r;renderKedatangan();}
   $("detailModal").classList.add("show");
 }
-function kdToggleAll(master){document.querySelectorAll("#dKedatangan .kd-it").forEach(c=>{c.checked=master.checked;});}
-function kdSyncAll(){const a=$("kdAll");if(!a)return;const items=[...document.querySelectorAll("#dKedatangan .kd-it")];a.checked=items.length>0&&items.every(c=>c.checked);}
-async function simpanKedatangan(nik){if(!isAdmin)return;const b=$("kdSave"),er=$("kdErr");er.style.display="none";  const tgl=$("kdTgl").value||null;const pl={};document.querySelectorAll("#dKedatangan .kd-it").forEach(c=>{pl[c.dataset.k]=c.checked;});
-  b.disabled=true;b.innerHTML='<span class="spin"></span>';
-  const{error}=await sb.rpc("simpan_kedatangan",{p_nik:nik,p_tgl:tgl,p_perlengkapan:pl});
-  b.disabled=false;b.innerHTML='<i class="bi bi-save"></i> Simpan kedatangan';
-  if(error){er.textContent=error.message||"Gagal menyimpan.";er.style.display="block";return;}
-  toast("Kedatangan tersimpan ✓");karCache=null;
-  openDetail(nik); // muat ulang tampilan detail
-  const act=document.querySelector(".panel.active");if(act&&act.id==="sec-kamar")loadKamar();
+let kdData=null;
+function renderKedatangan(){
+  const r=kdData;if(!r)return;const kdBox=$("dKedatangan");
+  const pl=r.perlengkapan&&typeof r.perlengkapan==="object"?r.perlengkapan:{};
+  const resmi=isResmiMasuk(r);
+  const badge=resmi
+    ?`<span style="font-size:12px;font-weight:700;color:var(--ok)"><i class="bi bi-check-circle-fill"></i> Resmi masuk</span>`
+    :`<span style="font-size:12px;font-weight:700;color:var(--full)"><i class="bi bi-circle"></i> Belum resmi masuk</span>`;
+  const diambil=BEDDING.filter(([k])=>pl[k]).map(([,nm])=>nm).join(", ")||"—";
+  kdBox.innerHTML=`<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px"><span style="font-weight:700"><i class="bi bi-box-arrow-in-right"></i> Kedatangan</span>${badge}</div>
+    ${row("Masuk mess", r.tgl_masuk_mess)}${row("Perlengkapan diambil", diambil)}
+    ${isAdmin?`<div style="font-size:11.5px;color:var(--muted);margin-top:6px">Ubah lewat tombol <b>Edit</b> di bawah.</div>`:""}</div>`;
 }
+function kdToggleAll(master){const box=master.closest(".kdbox");if(!box)return;box.querySelectorAll(".kd-it").forEach(c=>{c.checked=master.checked;});}
+function kdSync(item){const box=item.closest(".kdbox");if(!box)return;const all=box.querySelector(".kd-all"),items=[...box.querySelectorAll(".kd-it")];if(all)all.checked=items.length>0&&items.every(c=>c.checked);}
 function closeDetail(){$("detailModal").classList.remove("show");}
 
 /* TAMBAH KARYAWAN */
