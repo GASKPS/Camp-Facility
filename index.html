@@ -1389,5 +1389,15 @@ function screenshotTabel(){const c=document.querySelector("#shot .tbl-wrap"),t=$
     const a=document.createElement("a");a.download=`Data_Mess_${Date.now()}.png`;a.href=cv.toDataURL("image/png");a.click();
     c.style.width=ow;c.style.overflow=oo;c.style.maxHeight=om;});},300);}
 </script>
+<script>
+/* Penghalang dasar (lapisan gertak — bisa ditembus orang teknis) */
+document.addEventListener("contextmenu",e=>e.preventDefault());           // klik kanan
+document.addEventListener("keydown",e=>{
+  const k=(e.key||"").toUpperCase();
+  if(k==="F12") e.preventDefault();                                       // F12
+  if(e.ctrlKey&&e.shiftKey&&(k==="I"||k==="J"||k==="C")) e.preventDefault(); // devtools
+  if(e.ctrlKey&&(k==="U"||k==="S")) e.preventDefault();                   // view-source / save
+});
+</script>
 </body>
 </html>
