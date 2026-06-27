@@ -505,6 +505,7 @@ tbody tr:hover{background:var(--canvas);}
       <div id="eKdItems"></div>
     </div>
   </div>
+  <div id="lbBlock" class="fld"><label>Link bukti pengambilan <span style="color:var(--muted);font-weight:400">(tempel link dari Google Form)</span></label><input id="eLink" class="inp" placeholder="https://…"></div>
   <div id="resignBlock" style="display:none">
     <div class="grid2">
       <div class="fld"><label>Tanggal resign</label><input id="eTglResign" type="date" class="inp"></div>
@@ -1189,11 +1190,12 @@ async function openEdit(nik){if(!isAdmin)return;const{data,error}=await sb.from(
   const pl=data.perlengkapan&&typeof data.perlengkapan==="object"?data.perlengkapan:{};
   $("eKdItems").innerHTML=BEDDING.map(([k,nm])=>`<label style="display:flex;align-items:center;gap:9px;font-size:13px;padding:6px 0"><input type="checkbox" class="kd-it" data-k="${k}" ${pl[k]?"checked":""} onchange="kdSync(this)"> ${nm}</label>`).join("");
   const allOn=BEDDING.every(([k])=>pl[k]===true);document.querySelector("#kdBlock .kd-all").checked=allOn;
+  $("eLink").value=data.link_bukti||"";
   toggleResign();
   renderAsetChecklist(Array.isArray(data.aset_kembali)?data.aset_kembali:null);
   $("eErr").style.display="none";$("editModal").classList.add("show");}
 function closeEdit(){$("editModal").classList.remove("show");}
-function toggleResign(){const on=$("eStatus").value==="resign";$("resignBlock").style.display=on?"":"none";$("kdBlock").style.display=on?"none":"";if(on&&!$("eTglResign").value)$("eTglResign").value=new Date().toISOString().slice(0,10);}
+function toggleResign(){const on=$("eStatus").value==="resign";$("resignBlock").style.display=on?"":"none";$("kdBlock").style.display=on?"none":"";$("lbBlock").style.display=on?"none":"";if(on&&!$("eTglResign").value)$("eTglResign").value=new Date().toISOString().slice(0,10);}
 async function doEdit(){const nik=eNik.value.trim();if(!nik){const e=$("eErr");e.textContent="NIK tidak boleh kosong.";e.style.display="block";return;}
   const b=$("eSave");b.disabled=true;b.innerHTML='<span class="spin"></span>';$("eErr").style.display="none";
   const resign=$("eStatus").value==="resign";
@@ -1202,7 +1204,7 @@ async function doEdit(){const nik=eNik.value.trim();if(!nik){const e=$("eErr");e
     aset_kembali=boxes.filter(b=>b.checked).map(b=>Number(b.dataset.id));
     potongan=boxes.filter(b=>!b.checked).reduce((s,b)=>s+Number(b.dataset.harga||0),0);}
   const perlengkapan={};document.querySelectorAll("#eKdItems .kd-it").forEach(c=>{perlengkapan[c.dataset.k]=c.checked;});
-  const p={nik,nama:eNama.value.trim(),gender:eGender.value||null,gol:eGol.value.trim()||null,fasilitas:eFasilitas.value||null,department:eDept.value.trim()||null,jabatan:eJab.value.trim()||null,perusahaan:ePerusahaan.value.trim()||null,point_of_hire:ePoh.value.trim()||null,tgl_masuk_kerja:eTmk.value||null,tgl_masuk_mess:eTmm.value||null,perlengkapan:perlengkapan,status:eStatus.value,tgl_resign:resign?($("eTglResign").value||null):null,alasan_resign:resign?($("eAlasan").value.trim()||null):null,resign_oleh:resign?(curUser?.email||null):null,aset_kembali:aset_kembali,potongan:potongan};
+  const p={nik,nama:eNama.value.trim(),gender:eGender.value||null,gol:eGol.value.trim()||null,fasilitas:eFasilitas.value||null,department:eDept.value.trim()||null,jabatan:eJab.value.trim()||null,perusahaan:ePerusahaan.value.trim()||null,point_of_hire:ePoh.value.trim()||null,tgl_masuk_kerja:eTmk.value||null,tgl_masuk_mess:eTmm.value||null,perlengkapan:perlengkapan,link_bukti:$("eLink").value.trim()||null,status:eStatus.value,tgl_resign:resign?($("eTglResign").value||null):null,alasan_resign:resign?($("eAlasan").value.trim()||null):null,resign_oleh:resign?(curUser?.email||null):null,aset_kembali:aset_kembali,potongan:potongan};
   const{error}=await sb.from("karyawan").update(p).eq("nik",editOldNik);
   b.disabled=false;b.textContent="Simpan perubahan";
   if(error){const e=$("eErr");e.textContent=error.message||"Gagal menyimpan.";e.style.display="block";return;}
@@ -1298,9 +1300,11 @@ function renderKedatangan(){
     ?`<span style="font-size:12px;font-weight:700;color:var(--ok)"><i class="bi bi-check-circle-fill"></i> Resmi masuk</span>`
     :`<span style="font-size:12px;font-weight:700;color:var(--full)"><i class="bi bi-circle"></i> Belum resmi masuk</span>`;
   const diambil=BEDDING.filter(([k])=>pl[k]).map(([,nm])=>nm).join(", ")||"—";
+  const lb=(r.link_bukti||"").trim();
+  const lbRow=lb?`<div class="pf-row"><span class="k">Bukti pengambilan</span><span class="v"><a href="${lb.replace(/"/g,"&quot;")}" target="_blank" rel="noopener" style="color:var(--accent,#2456e6);font-weight:600"><i class="bi bi-box-arrow-up-right"></i> Buka foto</a></span></div>`:row("Bukti pengambilan","—");
   kdBox.innerHTML=`<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px"><span style="font-weight:700"><i class="bi bi-box-arrow-in-right"></i> Kedatangan</span>${badge}</div>
-    ${row("Masuk mess", r.tgl_masuk_mess)}${row("Perlengkapan diambil", diambil)}
+    ${row("Masuk mess", r.tgl_masuk_mess)}${row("Perlengkapan diambil", diambil)}${lbRow}
     ${isAdmin?`<div style="font-size:11.5px;color:var(--muted);margin-top:6px">Ubah lewat tombol <b>Edit</b> di bawah.</div>`:""}</div>`;
 }
 function kdToggleAll(master){const box=master.closest(".kdbox");if(!box)return;box.querySelectorAll(".kd-it").forEach(c=>{c.checked=master.checked;});}
